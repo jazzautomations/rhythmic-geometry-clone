@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, Plus, Save, Trash2 } from "lucide-react";
+import { Download, Music, Plus, Save, Trash2 } from "lucide-react";
 import {
   ATMOSPHERES,
   ATMOSPHERE_LAYERS,
@@ -11,6 +11,7 @@ import { paintAtmosphere } from "@/lib/rg/atmosphere";
 import { getAudio } from "@/lib/rg/audio";
 import { useRG, getAtmosphere } from "@/lib/rg/store";
 import { useSceneLibrary } from "@/lib/rg/useSceneLibrary";
+import { exportStudyWav } from "@/lib/rg/render";
 import {
   DEFAULT_STUDY_SCENES,
   ORBIT_PALETTE,
@@ -363,6 +364,21 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
     library.save({ name: `${scene.layers.map((l) => l.label).join(" v ")}`, mode: "polyrhythm-study", data: scene });
   };
 
+  // ---- Export WAV ----
+  const [rendering, setRendering] = useState(false);
+  const exportWAV = async () => {
+    if (rendering) return;
+    setRendering(true);
+    try {
+      const settings = useRG.getState().audio;
+      await exportStudyWav(scene, settings);
+    } catch (e) {
+      console.error("WAV export failed:", e);
+    } finally {
+      setRendering(false);
+    }
+  };
+
   return (
     <ModeControlsShell
       mode="polyrhythm-study"
@@ -401,6 +417,14 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
               className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-white/10 px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-white/70 transition hover:border-[#7FD7FF]/40 hover:text-white"
             >
               <Download size={11} /> PNG
+            </button>
+            <button
+              onClick={exportWAV}
+              disabled={rendering}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-[#7FD7FF]/30 bg-[#7FD7FF]/10 px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-[#7FD7FF] transition hover:bg-[#7FD7FF]/20 disabled:cursor-wait disabled:opacity-50"
+              title="Render to WAV (offline)"
+            >
+              <Music size={11} /> {rendering ? "..." : "WAV"}
             </button>
             <button
               onClick={saveToLibrary}

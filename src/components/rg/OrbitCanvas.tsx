@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, Plus, Save, Trash2 } from "lucide-react";
+import { Download, Music, Plus, Save, Trash2 } from "lucide-react";
 import {
   ATMOSPHERES,
   ATMOSPHERE_LAYERS,
@@ -15,6 +15,7 @@ import { paintAtmosphere } from "@/lib/rg/atmosphere";
 import { getAudio } from "@/lib/rg/audio";
 import { useRG, getAtmosphere } from "@/lib/rg/store";
 import { useSceneLibrary } from "@/lib/rg/useSceneLibrary";
+import { exportOrbitWav } from "@/lib/rg/render";
 import { ModeControlsShell } from "./ModeControlsShell";
 
 interface OrbitCanvasProps {
@@ -449,6 +450,21 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
     URL.revokeObjectURL(url);
   };
 
+  // ---- Export WAV (offline render) ----
+  const [rendering, setRendering] = useState(false);
+  const exportWAV = async () => {
+    if (rendering) return;
+    setRendering(true);
+    try {
+      const settings = useRG.getState().audio;
+      await exportOrbitWav(scene, settings);
+    } catch (e) {
+      console.error("WAV export failed:", e);
+    } finally {
+      setRendering(false);
+    }
+  };
+
   return (
     <ModeControlsShell
       mode="orbital"
@@ -476,6 +492,14 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
               className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-white/10 px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-white/70 transition hover:border-[#00FFAA]/40 hover:text-white"
             >
               <Download size={11} /> JSON
+            </button>
+            <button
+              onClick={exportWAV}
+              disabled={rendering}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-[#00FFAA]/30 bg-[#00FFAA]/10 px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-[#00FFAA] transition hover:bg-[#00FFAA]/20 disabled:cursor-wait disabled:opacity-50"
+              title="Render scene to WAV (offline)"
+            >
+              <Music size={11} /> {rendering ? "..." : "WAV"}
             </button>
             <button
               onClick={saveToLibrary}

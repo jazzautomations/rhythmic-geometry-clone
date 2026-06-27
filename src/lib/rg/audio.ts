@@ -320,6 +320,8 @@ class AudioEngine {
 
   // The main "blip" — a stacked synth voice with filter envelope.
   // If `noteIndex` is supplied, resolves through the active TonePreset's noteSet.
+  // `when` (seconds, ctx-relative) lets callers schedule into the future
+  // (used by the offline WAV renderer).
   blip(opts: {
     color?: string;
     freq?: number;
@@ -329,13 +331,16 @@ class AudioEngine {
     duration?: number;
     pan?: number; // -1..1
     type?: CycleType;
+    when?: number;
   }) {
     if (this.settings.muted) return;
     try {
       const ctx = this.ensure();
-      const now = ctx.currentTime;
-      const rate = this.fireRate();
-      if (this.throttled(opts.voiceId, rate)) return;
+      const now = opts.when ?? ctx.currentTime;
+      if (!opts.when) {
+        const rate = this.fireRate();
+        if (this.throttled(opts.voiceId, rate)) return;
+      }
 
       // Resolve frequency: explicit > noteIndex (via TonePreset) > color hue
       let freq: number;
@@ -349,23 +354,18 @@ class AudioEngine {
 
       const type = opts.type ?? "tone";
       const velocity = Math.max(1, opts.velocity ?? 1);
-      // Type-based amplitude/timbre tweaks (mirrors the original `yr` defaults)
       const typeBoost = type === "bass" ? 1.4 : type === "spark" ? 0.55 : type === "ghost" ? 0.35 : 1;
       const peakAmp = Math.min(0.28, (0.22 / Math.sqrt(velocity)) * typeBoost);
       const duration = opts.duration ?? this.settings.release;
       const pan = opts.pan ?? 0;
       const attack = this.settings.attack;
 
-      // Bass voices: drop an octave
       if (type === "bass") freq *= 0.5;
-      // Spark voices: bump an octave
       if (type === "spark") freq *= 2;
 
-      // ---- Voice bus ----
       const voiceBus = ctx.createGain();
       voiceBus.gain.value = 0;
 
-      // Per-voice lowpass filter with envelope
       const filter = ctx.createBiquadFilter();
       filter.type = "lowpass";
       filter.Q.value = this.settings.filterResonance;
@@ -374,18 +374,14 @@ class AudioEngine {
       filter.frequency.setValueAtTime(cutoffStart, now);
       filter.frequency.exponentialRampToValueAtTime(Math.max(120, cutoffEnd), now + duration * 0.7);
 
-      // Panner
       const panner = ctx.createStereoPanner();
       panner.pan.value = pan;
 
-      // Stack oscillators
       const oscs: OscillatorNode[] = [];
-      // 1) Sine (fundamental)
       const sine = ctx.createOscillator();
       sine.type = "sine";
       sine.frequency.setValueAtTime(freq, now);
       oscs.push(sine);
-      // 2) Triangle an octave up (airy layer)
       if (this.settings.triangleLayer) {
         const tri = ctx.createOscillator();
         tri.type = "triangle";
@@ -396,7 +392,6 @@ class AudioEngine {
         triGain.connect(filter);
         oscs.push(tri);
       }
-      // 3) Sub an octave below
       if (this.settings.subOsc) {
         const sub = ctx.createOscillator();
         sub.type = "sine";
@@ -408,13 +403,11 @@ class AudioEngine {
         oscs.push(sub);
       }
 
-      // Main sine gain
       const sineGain = ctx.createGain();
       sineGain.gain.value = 0.6;
       sine.connect(sineGain);
       sineGain.connect(filter);
 
-      // Amp envelope
       voiceBus.gain.setValueAtTime(0, now);
       voiceBus.gain.linearRampToValueAtTime(peakAmp, now + attack);
       voiceBus.gain.exponentialRampToValueAtTime(0.001, now + duration);
@@ -433,17 +426,19 @@ class AudioEngine {
   }
 
   // Drum-style hit — synthesized kick / snare / hat based on pitch range.
+  // `when` allows offline scheduling.
   drumHit(opts: {
     midi: number;
     color: string;
     accent: boolean;
     trackId: string;
     pan?: number;
+    when?: number;
   }) {
     if (this.settings.muted) return;
     try {
       const ctx = this.ensure();
-      const now = ctx.currentTime;
+      const now = opts.when ?? ctx.currentTime;
       const pan = opts.pan ?? 0;
       const peak = opts.accent ? 0.32 : 0.2;
       const panner = ctx.createStereoPanner();
@@ -451,7 +446,7 @@ class AudioEngine {
       panner.connect(this.master ?? ctx.destination);
 
       if (opts.midi < 50) {
-        // ---- KICK ---- sine with pitch drop + click
+        // KICK
         const osc = ctx.createOscillator();
         osc.type = "sine";
         const startFreq = midiToFreq(opts.midi) * 2.4;
@@ -464,7 +459,6 @@ class AudioEngine {
         gain.gain.linearRampToValueAtTime(peak, now + 0.004);
         gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
 
-        // Click transient
         const click = ctx.createOscillator();
         click.type = "square";
         click.frequency.setValueAtTime(startFreq * 4, now);
@@ -482,7 +476,7 @@ class AudioEngine {
         click.start(now);
         click.stop(now + 0.05);
       } else if (opts.midi < 70) {
-        // ---- SNARE ---- noise burst + tone
+        // SNARE
         const noiseBuf = this.getNoiseBuffer();
         const noise = ctx.createBufferSource();
         noise.buffer = noiseBuf;
@@ -512,7 +506,7 @@ class AudioEngine {
         tone.start(now);
         tone.stop(now + 0.15);
       } else {
-        // ---- HAT ---- filtered noise burst, short
+        // HAT
         const noiseBuf = this.getNoiseBuffer();
         const noise = ctx.createBufferSource();
         noise.buffer = noiseBuf;
