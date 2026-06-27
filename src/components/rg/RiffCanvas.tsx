@@ -8,6 +8,7 @@ import {
   TONE_PRESETS,
 } from "@/lib/rg/presets";
 import { paintAtmosphere } from "@/lib/rg/atmosphere";
+import { paintAtmosphereCached } from "@/lib/rg/atmosphereCache";
 import { getAudio } from "@/lib/rg/audio";
 import { useRG, getAtmosphere } from "@/lib/rg/store";
 import { useSceneLibrary } from "@/lib/rg/useSceneLibrary";
@@ -69,7 +70,7 @@ export function RiffCanvas({ playing, muted }: RiffCanvasProps) {
       stateRef.current.startPerf = performance.now();
       stateRef.current.lastFiredStep = -1;
       stateRef.current.flashes.clear();
-      getAudio().resume();
+      // Audio resume is handled by the Play button onClick (iOS Safari requirement)
     }
   }, [playing]);
 
@@ -158,12 +159,15 @@ export function RiffCanvas({ playing, muted }: RiffCanvasProps) {
     let raf = 0;
     const atmo = getAtmosphere(atmosphereId);
     const draw = () => {
-      // Atmosphere background
-      paintAtmosphere(ctx as CanvasRenderingContext2D, w, h, atmo, {
-        presentationMode: false,
-        seed: 47,
-        layer: "none",
-      });
+      // Atmosphere background (cached)
+      paintAtmosphereCached(
+        ctx as CanvasRenderingContext2D,
+        w,
+        h,
+        atmo,
+        "none",
+        dpr,
+      );
       // FFT overlay
       const fft = getAudio().getFFT();
       if (fft && fft.length > 0) {
@@ -545,15 +549,15 @@ export function RiffCanvas({ playing, muted }: RiffCanvasProps) {
             {scene.tracks.map((t) => (
               <div key={t.id} className="flex items-stretch gap-2">
                 <div
-                  className="flex w-[100px] shrink-0 items-center gap-2 rounded-md border border-white/10 bg-black/30 px-2 py-1.5"
+                  className="flex w-[80px] shrink-0 items-center gap-2 rounded-md border border-white/10 bg-black/30 px-2 py-1.5 sm:w-[100px]"
                   style={{ borderLeftColor: t.color, borderLeftWidth: 3 }}
                 >
                   <span
-                    className="h-2.5 w-2.5 rounded-full"
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
                     style={{ background: t.color, boxShadow: `0 0 10px ${t.color}88` }}
                   />
                   <div className="min-w-0">
-                    <div className="truncate text-[11px] font-mono text-white/85">{t.name}</div>
+                    <div className="truncate text-[10px] font-mono text-white/85 sm:text-[11px]">{t.name}</div>
                     <div className="text-[9px] font-mono text-white/40">{midiToName(t.pitch)}</div>
                   </div>
                 </div>
@@ -576,7 +580,19 @@ export function RiffCanvas({ playing, muted }: RiffCanvasProps) {
                             toggleAccent(t.id, i);
                           }
                         }}
-                        className={`relative h-9 w-[26px] rounded-md border transition ${
+                        // Long-press for accent (mobile touch)
+                        onTouchStart={(e) => {
+                          const timer = setTimeout(() => {
+                            e.preventDefault();
+                            toggleAccent(t.id, i);
+                            // Haptic feedback if available
+                            if (navigator.vibrate) navigator.vibrate(15);
+                          }, 400);
+                          const cancel = () => clearTimeout(timer);
+                          window.addEventListener("touchend", cancel, { once: true });
+                          window.addEventListener("touchmove", cancel, { once: true });
+                        }}
+                        className={`relative h-10 w-7 rounded-md border transition sm:h-9 sm:w-[26px] ${
                           s.hit
                             ? s.accent
                               ? "border-white/80"
@@ -599,6 +615,7 @@ export function RiffCanvas({ playing, muted }: RiffCanvasProps) {
                               ? `inset 0 0 ${flash * 20}px ${t.color}66`
                               : "none",
                           transform: flash > 0.5 ? `scale(${1 + flash * 0.08})` : "scale(1)",
+                          touchAction: "manipulation",
                         }}
                         title={`Step ${i + 1} · ${midiToName(t.pitch)}`}
                       />

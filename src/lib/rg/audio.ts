@@ -198,6 +198,27 @@ class AudioEngine {
   resume() {
     try {
       this.ensure();
+      // Force resume — on iOS Safari, this MUST be called from within a
+      // user gesture (touch/click). The ModeControlsShell Play button calls
+      // getAudio().resume() synchronously in its onClick handler.
+      if (this.ctx && this.ctx.state !== "running") {
+        const p = this.ctx.resume();
+        // Also create a silent oscillator → gain → destination to "unlock"
+        // the audio on iOS (some versions need an actual sound played first).
+        try {
+          const ctx = this.ctx;
+          const osc = ctx.createOscillator();
+          const g = ctx.createGain();
+          g.gain.value = 0;
+          osc.connect(g);
+          g.connect(ctx.destination);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.01);
+        } catch {
+          // ignore
+        }
+        return p;
+      }
     } catch {
       // no-op
     }

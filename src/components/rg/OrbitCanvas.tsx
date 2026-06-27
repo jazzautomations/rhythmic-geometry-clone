@@ -12,6 +12,7 @@ import {
   type Cycle,
 } from "@/lib/rg/presets";
 import { paintAtmosphere } from "@/lib/rg/atmosphere";
+import { paintAtmosphereCached } from "@/lib/rg/atmosphereCache";
 import { getAudio } from "@/lib/rg/audio";
 import { useRG, getAtmosphere } from "@/lib/rg/store";
 import { useSceneLibrary } from "@/lib/rg/useSceneLibrary";
@@ -96,7 +97,7 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
       stateRef.current.startPerf = performance.now();
       stateRef.current.lastPulse.clear();
       stateRef.current.flashes.clear();
-      getAudio().resume();
+      // Audio resume is handled by the Play button onClick (iOS Safari requirement)
     }
   }, [playing]);
 
@@ -184,29 +185,32 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
       const st = stateRef.current;
       const atmo = getAtmosphere(atmosphereId);
 
-      // 1) Paint atmosphere onto main canvas
+      // 1) Paint atmosphere onto main canvas (cached for performance)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      paintAtmosphere(ctx as CanvasRenderingContext2D, w, h, atmo, {
-        presentationMode: false,
-        seed: 47,
-        layer: atmosphereLayer,
-      });
+      paintAtmosphereCached(
+        ctx as CanvasRenderingContext2D,
+        w,
+        h,
+        atmo,
+        atmosphereLayer,
+        dpr,
+      );
 
-      // 1b) Always render a subtle stardust field on top of the atmosphere
-      // (matches original which always has fine dust even on "none" layers)
+      // 1b) Subtle stardust field — sparse, just adds depth without competing
+      // with the rose-curve trails. Regenerate on resize only.
       if (st.stardust.length === 0 || st.stardustW !== w || st.stardustH !== h) {
-        // Generate ~140 stars deterministically
         let seed = 1337;
         const rng = () => {
           seed = (seed * 1664525 + 1013904223) >>> 0;
           return seed / 4294967296;
         };
-        const count = Math.floor((w * h) / 6500);
+        // Fewer stars — about 1 per 12000 px² (sparse, not a starfield)
+        const count = Math.floor((w * h) / 12000);
         st.stardust = Array.from({ length: count }, () => ({
           x: rng() * w,
           y: rng() * h,
-          r: 0.3 + rng() * 1.1,
-          a: 0.12 + rng() * 0.5,
+          r: 0.3 + rng() * 0.8,
+          a: 0.08 + rng() * 0.25,
         }));
         st.stardustW = w;
         st.stardustH = h;
@@ -214,8 +218,8 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       for (const s of st.stardust) {
-        ctx.globalAlpha = s.a * 0.7;
-        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.globalAlpha = s.a;
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
         ctx.fill();

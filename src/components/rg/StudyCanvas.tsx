@@ -8,6 +8,7 @@ import {
   TONE_PRESETS,
 } from "@/lib/rg/presets";
 import { paintAtmosphere } from "@/lib/rg/atmosphere";
+import { paintAtmosphereCached } from "@/lib/rg/atmosphereCache";
 import { getAudio } from "@/lib/rg/audio";
 import { useRG, getAtmosphere } from "@/lib/rg/store";
 import { useSceneLibrary } from "@/lib/rg/useSceneLibrary";
@@ -69,7 +70,7 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
       stateRef.current.startPerf = performance.now();
       stateRef.current.lastFiredStep = -1;
       stateRef.current.flashes.clear();
-      getAudio().resume();
+      // Audio resume is handled by the Play button onClick (iOS Safari requirement)
     }
   }, [playing]);
 
@@ -119,13 +120,16 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
       const st = stateRef.current;
       const atmo = getAtmosphere(atmosphereId);
 
-      // Background atmosphere (subtle)
+      // Background atmosphere (cached for performance)
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      paintAtmosphere(ctx as CanvasRenderingContext2D, w, h, atmo, {
-        presentationMode: false,
-        seed: 47,
-        layer: "none",
-      });
+      paintAtmosphereCached(
+        ctx as CanvasRenderingContext2D,
+        w,
+        h,
+        atmo,
+        "none",
+        dpr,
+      );
 
       const totalSteps = scn.stepsPerBar * scn.bars;
       const layerLcm = scn.layers.reduce((acc, l) => lcm(acc, l.pulseCount), 1);

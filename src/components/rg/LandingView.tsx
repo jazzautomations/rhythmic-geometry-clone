@@ -86,11 +86,11 @@ export function LandingView() {
         <div className="absolute left-1/2 top-28 h-[12rem] w-[12rem] -translate-x-1/2 rounded-full border border-[#00ffaa]/12" />
       </div>
 
-      {/* Header — exact copy from original */}
-      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#090a10]/70 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-          <button onClick={() => useRG.getState().goHome()} className="group block">
-            <div className="text-[15px] font-medium uppercase tracking-[0.34em] text-white/82 transition-colors group-hover:text-white sm:text-[17px]">
+      {/* Header — exact copy from original, mobile-optimized */}
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#090a10]/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-3 py-3 sm:px-8 sm:py-4">
+          <button onClick={() => useRG.getState().goHome()} className="group block min-w-0">
+            <div className="truncate text-[12px] font-medium uppercase tracking-[0.2em] text-white/82 transition-colors group-hover:text-white sm:text-[15px] sm:tracking-[0.34em] md:text-[17px]">
               Rhythmic Geometry
               <span className="align-super text-[0.52em] tracking-[0.08em]">™</span>
             </div>
@@ -112,33 +112,32 @@ export function LandingView() {
               Pro
             </a>
           </nav>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => goLaunch()}
-              className="inline-flex items-center gap-2 rounded-full border border-[#00ffaa]/25 bg-[#00ffaa]/12 px-4 py-2 text-[11px] font-mono uppercase tracking-[0.14em] text-[#00ffaa] transition hover:bg-[#00ffaa]/18"
-            >
-              Launch App
-              <ArrowRight size={14} />
-            </button>
-          </div>
+          <button
+            onClick={() => goLaunch()}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[#00ffaa]/25 bg-[#00ffaa]/12 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-[#00ffaa] transition hover:bg-[#00ffaa]/18 sm:gap-2 sm:px-4 sm:py-2 sm:text-[11px] sm:tracking-[0.14em]"
+          >
+            Launch App
+            <ArrowRight size={12} className="sm:hidden" />
+            <ArrowRight size={14} className="hidden sm:inline" />
+          </button>
         </div>
       </header>
 
       <main>
-        {/* HERO — exact copy from original */}
-        <section className="px-5 pt-20 pb-24 sm:px-8 sm:pt-28">
+        {/* HERO — exact copy from original, mobile-optimized */}
+        <section className="px-3 pt-10 pb-16 sm:px-8 sm:pt-20 sm:pb-24">
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.7 }}
-            className="mx-auto grid max-w-7xl gap-8 sm:gap-12 lg:grid-cols-[0.84fr_1.16fr] lg:items-end"
+            className="mx-auto grid max-w-7xl gap-6 sm:gap-12 lg:grid-cols-[0.84fr_1.16fr] lg:items-end"
           >
             <div className="flex max-w-2xl flex-col items-center sm:block">
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[11px] font-mono uppercase tracking-[0.16em] text-white/62">
-                <Sparkles size={14} className="text-[#7fd7ff]" />
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] text-white/62 sm:px-4 sm:py-2 sm:text-[11px] sm:tracking-[0.16em]">
+                <Sparkles size={12} className="text-[#7fd7ff] sm:size-3.5" />
                 See The Structure Inside Rhythm
               </div>
-              <h1 className="mt-8 w-fit text-center font-serif text-[2.15rem] font-light tracking-[-0.05em] leading-[0.92] text-white sm:mt-14 sm:max-w-2xl sm:w-auto sm:text-left sm:text-[4.25rem] sm:leading-[0.94] lg:text-[5rem]">
+              <h1 className="mt-6 w-fit text-center font-serif text-[2rem] font-light tracking-[-0.05em] leading-[0.95] text-white sm:mt-14 sm:max-w-2xl sm:w-auto sm:text-left sm:text-[4.25rem] sm:leading-[0.94] lg:text-[5rem]">
                 Rhythm
                 <br />
                 Visualized
@@ -147,23 +146,23 @@ export function LandingView() {
                 <br />
                 Geometry
               </h1>
-              <p className="mt-6 max-w-lg text-center text-base leading-7 text-white/64 sm:mt-12 sm:max-w-xl sm:text-left sm:text-lg sm:leading-8">
+              <p className="mt-5 max-w-lg text-center text-sm leading-7 text-white/64 sm:mt-12 sm:max-w-xl sm:text-left sm:text-lg sm:leading-8">
                 A moving visual instrument for exploring rhythm as structure.
                 <br />
                 <br />
                 Set simple ratios. Watch them unfold into motion, pattern, and form.
               </p>
-              <p className="mt-8 hidden max-w-xl text-center text-sm leading-8 text-white/44 sm:block sm:text-left sm:text-base">
+              <p className="mt-6 hidden max-w-xl text-center text-sm leading-8 text-white/44 sm:block sm:text-left sm:text-base">
                 What you hear as rhythm... reveals itself as geometry over time.
               </p>
 
               {/* Mode launch buttons */}
-              <div className="mt-14 hidden flex-wrap items-center gap-4 sm:flex">
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-2 sm:mt-14 sm:justify-start sm:gap-4">
                 {MODES.map((m) => (
                   <button
                     key={m.id}
                     onClick={() => goApp(m.id)}
-                    className="inline-flex items-center gap-2 rounded-full border px-5 py-3 text-[12px] font-mono uppercase tracking-[0.14em] transition"
+                    className="inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[10px] font-mono uppercase tracking-[0.12em] transition sm:gap-2 sm:px-5 sm:py-3 sm:text-[12px] sm:tracking-[0.14em]"
                     style={{
                       borderColor: `${m.accent}30`,
                       background: `${m.accent}12`,
@@ -171,13 +170,14 @@ export function LandingView() {
                     }}
                   >
                     {m.launchLabel}
-                    <ArrowRight size={15} />
+                    <ArrowRight size={12} className="sm:hidden" />
+                    <ArrowRight size={15} className="hidden sm:inline" />
                   </button>
                 ))}
               </div>
 
               {/* Mini mode cards */}
-              <div className="mt-12 hidden gap-3 sm:grid sm:grid-cols-3">
+              <div className="mt-6 hidden w-full gap-3 sm:grid sm:grid-cols-3">
                 {MODES.map((m) => (
                   <button
                     key={m.id}

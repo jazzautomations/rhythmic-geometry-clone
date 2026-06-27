@@ -95,18 +95,18 @@ export function OrbitPreview({
       trailCanvas = null;
       trailCtx = null;
       prevPositions.clear();
-      // Regenerate stardust
+      // Regenerate sparse stardust (1 per 14000 px²)
       let s = 1337;
       const rng = () => {
         s = (s * 1664525 + 1013904223) >>> 0;
         return s / 4294967296;
       };
-      const count = Math.floor((w * h) / 8000);
+      const count = Math.floor((w * h) / 14000);
       stardust = Array.from({ length: count }, () => ({
         x: rng() * w,
         y: rng() * h,
-        r: 0.3 + rng() * 1.0,
-        a: 0.1 + rng() * 0.4,
+        r: 0.3 + rng() * 0.8,
+        a: 0.08 + rng() * 0.25,
       }));
     };
     resize();
@@ -129,12 +129,12 @@ export function OrbitPreview({
       ctx.fillStyle = "#05070d";
       ctx.fillRect(0, 0, w, h);
 
-      // Stardust (always present)
+      // Stardust (sparse, always present)
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       for (const s of stardust) {
-        ctx.globalAlpha = s.a * 0.7;
-        ctx.fillStyle = "rgba(255,255,255,0.8)";
+        ctx.globalAlpha = s.a;
+        ctx.fillStyle = "rgba(255,255,255,0.7)";
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
         ctx.fill();
