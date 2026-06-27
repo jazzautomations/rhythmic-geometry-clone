@@ -67,6 +67,13 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
     flashes: new Map<string, number>(),
     trailCanvas: null as OffscreenCanvas | HTMLCanvasElement | null,
     trailCtx: null as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null,
+    // Previous pulse positions per "cycleId:pulseIdx" — used to draw line segments
+    // between consecutive frames, creating the rose-curve / mandala trail effect.
+    prevPositions: new Map<string, { x: number; y: number }>(),
+    // Static stardust field — generated once per resize.
+    stardust: [] as { x: number; y: number; r: number; a: number }[],
+    stardustW: 0,
+    stardustH: 0,
   });
   const [bpm, setBpm] = useState(scene.tempo);
   const [speed, setSpeed] = useState(1);
@@ -113,6 +120,7 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
     stateRef.current.lastPulse.clear();
     stateRef.current.flashes.clear();
     stateRef.current.particles = [];
+    stateRef.current.prevPositions.clear();
     // Reset trail canvas
     stateRef.current.trailCanvas = null;
     stateRef.current.trailCtx = null;
@@ -184,6 +192,36 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
         layer: atmosphereLayer,
       });
 
+      // 1b) Always render a subtle stardust field on top of the atmosphere
+      // (matches original which always has fine dust even on "none" layers)
+      if (st.stardust.length === 0 || st.stardustW !== w || st.stardustH !== h) {
+        // Generate ~140 stars deterministically
+        let seed = 1337;
+        const rng = () => {
+          seed = (seed * 1664525 + 1013904223) >>> 0;
+          return seed / 4294967296;
+        };
+        const count = Math.floor((w * h) / 6500);
+        st.stardust = Array.from({ length: count }, () => ({
+          x: rng() * w,
+          y: rng() * h,
+          r: 0.3 + rng() * 1.1,
+          a: 0.12 + rng() * 0.5,
+        }));
+        st.stardustW = w;
+        st.stardustH = h;
+      }
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (const s of st.stardust) {
+        ctx.globalAlpha = s.a * 0.7;
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
       const cx = w / 2;
       const cy = h / 2;
       const maxR = Math.min(w, h) * 0.42;
@@ -191,18 +229,18 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
       const cyclesPerSec = (bpm / 60) * speed;
       const trailCtx = getTrailCtx();
 
-      // 2) Fade the trail buffer (this is what creates the rosacea trails)
+      // 2) Fade the trail buffer SLOWLY — long trails = rose-curve / mandala patterns.
+      // Lower trail value (closer to 0.5) = shorter trails; closer to 0.99 = very long.
       if (trailCtx) {
-        const fadeAlpha = Math.max(0.005, 0.05 - trail * 0.045);
+        const fadeAlpha = Math.max(0.002, 0.025 - trail * 0.023);
         trailCtx.globalCompositeOperation = "destination-out";
         trailCtx.fillStyle = `rgba(0,0,0,${fadeAlpha})`;
         trailCtx.fillRect(0, 0, w, h);
-        trailCtx.globalCompositeOperation = "lighter";
       }
 
-      // 3) Draw guide rings (subtle)
+      // 3) Draw guide rings (very subtle)
       ctx.lineWidth = 1;
-      ctx.strokeStyle = `rgba(255,255,255,${0.04 * atmo.lineAlpha})`;
+      ctx.strokeStyle = `rgba(255,255,255,${0.03 * atmo.lineAlpha})`;
       scn.cycles.forEach((c, i) => {
         const r = cycleRadius(c, i, maxR);
         ctx.beginPath();
@@ -210,7 +248,10 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
         ctx.stroke();
       });
 
-      // 4) Compute current pulse positions
+      // 4) Compute current pulse positions + draw LINE SEGMENTS into trail buffer.
+      // This is the KEY change — instead of just glowing dots, we draw the path
+      // each pulse travels between frames. Over time this builds the rose-curve /
+      // mandala patterns visible in the original.
       const positions: {
         x: number;
         y: number;
@@ -218,13 +259,15 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
         cycleId: string;
         size: number;
         type: Cycle["type"];
+        pulseIdx: number;
       }[] = [];
       scn.cycles.forEach((c, i) => {
         const r = cycleRadius(c, i, maxR);
-        const angularVel = (c.pulseCount > 0 ? 1 : 1) * cyclesPerSec * Math.PI * 2;
+        const angularVel = cyclesPerSec * Math.PI * 2;
         const baseAngle = elapsedSec * angularVel + (c.phase ?? 0) * Math.PI * 2;
-        for (let p = 0; p < Math.max(1, c.pulseCount); p++) {
-          const a = baseAngle + (p / Math.max(1, c.pulseCount)) * Math.PI * 2;
+        const count = Math.max(1, c.pulseCount);
+        for (let p = 0; p < count; p++) {
+          const a = baseAngle + (p / count) * Math.PI * 2;
           const x = cx + Math.cos(a) * r;
           const y = cy + Math.sin(a) * r;
           positions.push({
@@ -234,35 +277,50 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
             cycleId: c.id,
             size: c.size ?? 11,
             type: c.type,
+            pulseIdx: p,
           });
+
+          // Draw line segment from previous position to current into the trail buffer.
+          // This is what creates the continuous rose-curve / mandala trails.
+          if (trailCtx) {
+            const key = `${c.id}:${p}`;
+            const prev = st.prevPositions.get(key);
+            if (prev) {
+              const dx = x - prev.x;
+              const dy = y - prev.y;
+              const dist = Math.sqrt(dx * dx + dy * dy);
+              // Only draw if the segment is small (avoids huge jumps on resize/reset)
+              if (dist > 0.1 && dist < 80) {
+                // Use a soft translucent stroke — this is what gives the
+                // "sinuous lines" / organic feel of the original.
+                const grad = trailCtx.createLinearGradient(prev.x, prev.y, x, y);
+                grad.addColorStop(0, hexWithAlpha(c.color, 0.32));
+                grad.addColorStop(1, hexWithAlpha(c.color, 0.42));
+                trailCtx.strokeStyle = grad;
+                trailCtx.lineWidth = (c.size ?? 11) * 0.18;
+                trailCtx.lineCap = "round";
+                trailCtx.beginPath();
+                trailCtx.moveTo(prev.x, prev.y);
+                trailCtx.lineTo(x, y);
+                trailCtx.stroke();
+              }
+            }
+            st.prevPositions.set(key, { x, y });
+          }
         }
       });
 
-      // 5) Paint pulses onto trail buffer (rosacea effect)
-      if (trailCtx) {
-        for (const pos of positions) {
-          const sz = pos.size * 0.6 * atmo.glowMultiplier;
-          const grad = trailCtx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, sz * 2);
-          grad.addColorStop(0, pos.color);
-          grad.addColorStop(0.4, `${pos.color}88`);
-          grad.addColorStop(1, `${pos.color}00`);
-          trailCtx.fillStyle = grad;
-          trailCtx.beginPath();
-          trailCtx.arc(pos.x, pos.y, sz * 2, 0, Math.PI * 2);
-          trailCtx.fill();
-        }
-      }
-
-      // 6) Composite trail buffer onto main canvas
+      // 5) Composite trail buffer onto main canvas with additive blending.
+      // The trail buffer now holds the cumulative line-art mandala.
       if (trailCtx && st.trailCanvas) {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
-        ctx.globalAlpha = 0.85 * bloom;
+        ctx.globalAlpha = 0.9 * bloom;
         ctx.drawImage(st.trailCanvas as OffscreenCanvas | HTMLCanvasElement, 0, 0, w, h);
         ctx.restore();
       }
 
-      // 7) Connections between pulses from different cycles
+      // 6) Connections between pulses from different cycles (additive, ephemeral)
       if (connections && scn.cycles.length > 1) {
         ctx.save();
         ctx.globalCompositeOperation = "lighter";
@@ -274,7 +332,7 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
             const dy = positions[j].y - positions[i].y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             if (dist < maxDist) {
-              const alpha = (1 - dist / maxDist) * 0.7 * atmo.glowMultiplier;
+              const alpha = (1 - dist / maxDist) * 0.5 * atmo.glowMultiplier;
               const grad = ctx.createLinearGradient(
                 positions[i].x,
                 positions[i].y,
@@ -284,7 +342,7 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
               grad.addColorStop(0, hexWithAlpha(positions[i].color, alpha));
               grad.addColorStop(1, hexWithAlpha(positions[j].color, alpha));
               ctx.strokeStyle = grad;
-              ctx.lineWidth = 1.4;
+              ctx.lineWidth = 1.0;
               ctx.beginPath();
               ctx.moveTo(positions[i].x, positions[i].y);
               ctx.lineTo(positions[j].x, positions[j].y);
@@ -295,7 +353,7 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
         ctx.restore();
       }
 
-      // 8) Particles
+      // 7) Particles
       if (particlesOn) {
         const newParts: Particle[] = [];
         for (const p of st.particles) {
@@ -321,46 +379,62 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
         ctx.restore();
       }
 
-      // 9) Live pulse glow + core (additive)
+      // 8) Live pulse glow + sharp white core (smaller, sharper than before)
       ctx.save();
       ctx.globalCompositeOperation = "lighter";
       for (const pos of positions) {
         const flash = st.flashes.get(pos.cycleId) ?? 0;
-        const radius = (pos.size + flash * 14) * atmo.glowMultiplier;
-        const grad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius * 2);
-        grad.addColorStop(0, pos.color);
-        grad.addColorStop(0.3, `${pos.color}aa`);
-        grad.addColorStop(1, `${pos.color}00`);
+        const radius = (pos.size * 0.7 + flash * 10) * atmo.glowMultiplier;
+        // Outer soft glow
+        const grad = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, radius);
+        grad.addColorStop(0, hexWithAlpha(pos.color, 0.9));
+        grad.addColorStop(0.3, hexWithAlpha(pos.color, 0.5));
+        grad.addColorStop(1, hexWithAlpha(pos.color, 0));
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, radius * 2, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
 
-      // Core white dots
+      // Sharp white cores (small, bright — like stars at line intersections)
       for (const pos of positions) {
         const flash = st.flashes.get(pos.cycleId) ?? 0;
         ctx.fillStyle = "#ffffff";
         ctx.beginPath();
-        ctx.arc(pos.x, pos.y, 2 + flash * 2, 0, Math.PI * 2);
+        ctx.arc(pos.x, pos.y, 1.5 + flash * 1.5, 0, Math.PI * 2);
         ctx.fill();
+        // Tiny cross spike on flash for star-like sparkle
+        if (flash > 0.3) {
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          ctx.strokeStyle = hexWithAlpha(pos.color, flash * 0.6);
+          ctx.lineWidth = 0.8;
+          const sp = pos.size * 0.6 * flash;
+          ctx.beginPath();
+          ctx.moveTo(pos.x - sp, pos.y);
+          ctx.lineTo(pos.x + sp, pos.y);
+          ctx.moveTo(pos.x, pos.y - sp);
+          ctx.lineTo(pos.x, pos.y + sp);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
 
-      // 10) Center mark with master level
+      // 9) Center mark with master level
       const level = getAudio().getLevel();
       ctx.beginPath();
-      ctx.fillStyle = `rgba(255,255,255,${0.3 + level * 0.5})`;
-      ctx.arc(cx, cy, 2 + level * 8, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${0.25 + level * 0.4})`;
+      ctx.arc(cx, cy, 1.5 + level * 6, 0, Math.PI * 2);
       ctx.fill();
 
-      // 11) Decay flashes
+      // 10) Decay flashes
       for (const [k, v] of st.flashes) {
         st.flashes.set(k, v * 0.85);
         if (v < 0.02) st.flashes.delete(k);
       }
 
-      // 12) Audio firing — when a cycle's pulse crosses the playhead boundary
+      // 11) Audio firing — when a cycle's pulse crosses the playhead boundary
       if (playing && !muted) {
         for (let i = 0; i < scn.cycles.length; i++) {
           const c = scn.cycles[i];
@@ -387,18 +461,18 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
             });
             st.flashes.set(c.id, 1);
             if (particlesOn) {
-              for (let k = 0; k < 10; k++) {
+              for (let k = 0; k < 8; k++) {
                 const ang = Math.random() * Math.PI * 2;
-                const sp = 1 + Math.random() * 3.5;
+                const sp = 1 + Math.random() * 3;
                 st.particles.push({
                   x,
                   y,
                   vx: Math.cos(ang) * sp,
                   vy: Math.sin(ang) * sp,
-                  life: 0.7 + Math.random() * 0.5,
-                  maxLife: 1.2,
+                  life: 0.6 + Math.random() * 0.4,
+                  maxLife: 1.0,
                   color: c.color,
-                  size: 2 + Math.random() * 2,
+                  size: 1.5 + Math.random() * 1.5,
                 });
               }
             }
