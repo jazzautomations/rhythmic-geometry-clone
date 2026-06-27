@@ -17,6 +17,17 @@ interface OrbitCanvasProps {
   muted: boolean;
 }
 
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  size: number;
+}
+
 export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [scene, setScene] = useState<OrbitScene>(() =>
@@ -31,26 +42,31 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
     startPerf: 0,
     lastPulse: new Map<string, number>(),
     raf: 0,
+    particles: [] as Particle[],
+    flashes: new Map<string, number>(), // orbitId -> flash strength 0..1
   });
   const [activeSceneId, setActiveSceneId] = useState(DEFAULT_ORBIT_SCENES[0].id);
   const [bpm, setBpm] = useState(scene.baseBPM);
   const [speed, setSpeed] = useState(scene.speedMultiplier);
   const [trail, setTrail] = useState(1 - scene.trailAlpha);
   const [glow, setGlow] = useState(scene.glow);
+  const [connections, setConnections] = useState(true);
+  const [particles, setParticles] = useState(true);
+  const [fftBg, setFftBg] = useState(true);
 
   useEffect(() => {
     if (playing) {
       stateRef.current.startPerf = performance.now();
       stateRef.current.lastPulse.clear();
+      stateRef.current.flashes.clear();
       getAudio().resume();
     }
   }, [playing]);
 
   useEffect(() => {
-    getAudio().setMuted(muted);
+    getAudio().setSettings({ muted });
   }, [muted]);
 
-  // Push transport state into the scene ref (the RAF loop reads from there).
   useEffect(() => {
     setScene((prev) => {
       const next = { ...prev, baseBPM: bpm, speedMultiplier: speed, trailAlpha: 1 - trail, glow };
@@ -71,6 +87,8 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
     setGlow(next.glow);
     setActiveSceneId(id);
     stateRef.current.lastPulse.clear();
+    stateRef.current.flashes.clear();
+    stateRef.current.particles = [];
     const canvas = canvasRef.current;
     if (canvas) {
       const ctx = canvas.getContext("2d");
@@ -109,6 +127,29 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
       const scn = sceneRef.current;
       const st = stateRef.current;
 
+      // ---- Background FFT ----
+      if (fftBg) {
+        const fft = getAudio().getFFT();
+        if (fft && fft.length > 0) {
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          const bars = 64;
+          const step = Math.floor(fft.length / bars);
+          for (let i = 0; i < bars; i++) {
+            const v = fft[i * step] / 255;
+            const barW = w / bars;
+            const barH = v * h * 0.35;
+            const grad = ctx.createLinearGradient(0, h, 0, h - barH);
+            grad.addColorStop(0, `${scn.orbits[0]?.color ?? "#00FFAA"}40`);
+            grad.addColorStop(1, `${scn.orbits[0]?.color ?? "#00FFAA"}00`);
+            ctx.fillStyle = grad;
+            ctx.fillRect(i * barW, h - barH, barW - 1, barH);
+          }
+          ctx.restore();
+        }
+      }
+
+      // ---- Trail fade ----
       ctx.fillStyle = `rgba(5,7,13,${scn.trailAlpha})`;
       ctx.fillRect(0, 0, w, h);
 
@@ -116,11 +157,11 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
       const cy = h / 2;
 
       const elapsedSec = (now - st.startPerf) / 1000;
-      const playhead = playing ? elapsedSec : elapsedSec;
-
+      const playhead = elapsedSec;
       const cyclesPerSec = (scn.baseBPM / 60) * scn.speedMultiplier;
       const totalPulses = scn.orbits.reduce((acc, o) => acc + o.pulseCount, 0);
 
+      // ---- Guide rings + spokes (subtle) ----
       ctx.lineWidth = 1;
       for (const o of scn.orbits) {
         ctx.beginPath();
@@ -137,34 +178,138 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
         }
       }
 
+      // ---- Center mark with pulse ----
+      const overallLevel = getAudio().getLevel();
       ctx.beginPath();
-      ctx.fillStyle = "rgba(255,255,255,0.4)";
-      ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${0.3 + overallLevel * 0.6})`;
+      ctx.arc(cx, cy, 2 + overallLevel * 6, 0, Math.PI * 2);
       ctx.fill();
 
-      for (const o of scn.orbits) {
+      // ---- Compute pulse positions ----
+      const positions: { x: number; y: number; angle: number; color: string; orbitId: string; orbitIndex: number }[] = [];
+      for (let oi = 0; oi < scn.orbits.length; oi++) {
+        const o = scn.orbits[oi];
         const angularVel = (o.direction * cyclesPerSec * Math.PI * 2) / o.pulseCount;
         const baseAngle = playhead * angularVel + o.offsetTurns * Math.PI * 2;
         for (let p = 0; p < o.pulseCount; p++) {
           const a = baseAngle + (p / o.pulseCount) * Math.PI * 2;
           const x = cx + Math.cos(a) * o.radius;
           const y = cy + Math.sin(a) * o.radius;
+          positions.push({ x, y, angle: a, color: o.color, orbitId: o.id, orbitIndex: oi });
+        }
+      }
+
+      // ---- Connections between nearby pulses (additive) ----
+      if (connections && scn.orbits.length > 1) {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        const maxDist = 90;
+        for (let i = 0; i < positions.length; i++) {
+          for (let j = i + 1; j < positions.length; j++) {
+            const a = positions[i];
+            const b = positions[j];
+            if (a.orbitId === b.orbitId) continue;
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < maxDist) {
+              const alpha = (1 - dist / maxDist) * 0.6;
+              const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+              grad.addColorStop(0, `${a.color}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`);
+              grad.addColorStop(1, `${b.color}${Math.round(alpha * 255).toString(16).padStart(2, "0")}`);
+              ctx.strokeStyle = grad;
+              ctx.lineWidth = 1.2;
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.stroke();
+            }
+          }
+        }
+        ctx.restore();
+      }
+
+      // ---- Particles (spawn + update + draw) ----
+      if (particles) {
+        // Update
+        const newParts: Particle[] = [];
+        for (const p of st.particles) {
+          p.life -= 0.016;
+          if (p.life > 0) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vx *= 0.96;
+            p.vy *= 0.96;
+            newParts.push(p);
+          }
+        }
+        st.particles = newParts;
+        // Draw
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        for (const p of st.particles) {
+          const a = p.life / p.maxLife;
+          ctx.fillStyle = `${p.color}${Math.round(a * 200).toString(16).padStart(2, "0")}`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * a, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // ---- Pulses (with flash + glow) ----
+      ctx.save();
+      ctx.globalCompositeOperation = "lighter";
+      for (let oi = 0; oi < scn.orbits.length; oi++) {
+        const o = scn.orbits[oi];
+        const angularVel = (o.direction * cyclesPerSec * Math.PI * 2) / o.pulseCount;
+        const baseAngle = playhead * angularVel + o.offsetTurns * Math.PI * 2;
+        const flash = st.flashes.get(o.id) ?? 0;
+        for (let p = 0; p < o.pulseCount; p++) {
+          const a = baseAngle + (p / o.pulseCount) * Math.PI * 2;
+          const x = cx + Math.cos(a) * o.radius;
+          const y = cy + Math.sin(a) * o.radius;
+          const radius = (scn.glow ? 22 : 10) + flash * 14;
           if (scn.glow) {
-            const g = ctx.createRadialGradient(x, y, 0, x, y, 22);
+            const g = ctx.createRadialGradient(x, y, 0, x, y, radius);
             g.addColorStop(0, o.color);
+            g.addColorStop(0.4, `${o.color}88`);
             g.addColorStop(1, `${o.color}00`);
             ctx.fillStyle = g;
             ctx.beginPath();
-            ctx.arc(x, y, 22, 0, Math.PI * 2);
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
             ctx.fill();
           }
+        }
+      }
+      ctx.restore();
+
+      // Core white dots (normal blending)
+      for (let oi = 0; oi < scn.orbits.length; oi++) {
+        const o = scn.orbits[oi];
+        const angularVel = (o.direction * cyclesPerSec * Math.PI * 2) / o.pulseCount;
+        const baseAngle = playhead * angularVel + o.offsetTurns * Math.PI * 2;
+        const flash = st.flashes.get(o.id) ?? 0;
+        for (let p = 0; p < o.pulseCount; p++) {
+          const a = baseAngle + (p / o.pulseCount) * Math.PI * 2;
+          const x = cx + Math.cos(a) * o.radius;
+          const y = cy + Math.sin(a) * o.radius;
           ctx.fillStyle = "#ffffff";
           ctx.beginPath();
-          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.arc(x, y, 3 + flash * 2, 0, Math.PI * 2);
           ctx.fill();
         }
+      }
 
-        if (playing && !muted) {
+      // ---- Decay flashes ----
+      for (const [k, v] of st.flashes) {
+        st.flashes.set(k, v * 0.85);
+        if (v < 0.02) st.flashes.delete(k);
+      }
+
+      // ---- Audio firing ----
+      if (playing && !muted) {
+        for (const o of scn.orbits) {
           const turns = playhead * cyclesPerSec;
           const phase = (turns * o.pulseCount + o.offsetTurns * o.pulseCount) % o.pulseCount;
           const idx = Math.floor(phase);
@@ -172,12 +317,38 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
           if (idx !== lastIdx) {
             st.lastPulse.set(o.id, idx);
             const velocity = Math.max(1, totalPulses);
+            // Pan based on orbit index (alternate L/R)
+            const pan = (o.color === scn.orbits[0]?.color) ? 0 : ((scn.orbits.indexOf(o) % 2 === 0) ? 0.4 : -0.4);
             getAudio().blip({
               color: o.color,
-              orbitId: o.id,
+              voiceId: o.id,
               velocity,
-              duration: 0.12,
+              duration: 0.32,
+              pan,
             });
+            st.flashes.set(o.id, 1);
+            // Spawn particles
+            if (particles) {
+              const angularVel = (o.direction * cyclesPerSec * Math.PI * 2) / o.pulseCount;
+              const baseAngle = playhead * angularVel + o.offsetTurns * Math.PI * 2;
+              const a = baseAngle + (idx / o.pulseCount) * Math.PI * 2;
+              const x = cx + Math.cos(a) * o.radius;
+              const y = cy + Math.sin(a) * o.radius;
+              for (let i = 0; i < 8; i++) {
+                const ang = Math.random() * Math.PI * 2;
+                const sp = 1 + Math.random() * 3;
+                st.particles.push({
+                  x,
+                  y,
+                  vx: Math.cos(ang) * sp,
+                  vy: Math.sin(ang) * sp,
+                  life: 0.6 + Math.random() * 0.4,
+                  maxLife: 1,
+                  color: o.color,
+                  size: 2 + Math.random() * 2,
+                });
+              }
+            }
           }
         }
       }
@@ -190,7 +361,7 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
       cancelAnimationFrame(stateRef.current.raf);
       ro.disconnect();
     };
-  }, [playing, muted, scene]);
+  }, [playing, muted, scene, connections, particles, fftBg]);
 
   const addOrbit = () => {
     setScene((prev) => {
@@ -244,6 +415,9 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
           <Slider label="Speed" value={speed} min={0.25} max={3} step={0.05} onChange={setSpeed} suffix="x" />
           <Slider label="Trails" value={trail} min={0.02} max={1} step={0.02} onChange={setTrail} suffix="" />
           <Toggle label="Glow" value={glow} onChange={setGlow} />
+          <Toggle label="Connections" value={connections} onChange={setConnections} />
+          <Toggle label="Particles" value={particles} onChange={setParticles} />
+          <Toggle label="FFT Background" value={fftBg} onChange={setFftBg} />
         </>
       }
       editor={
@@ -296,9 +470,7 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
                     onChange={(v) => updateOrbit(o.id, { radius: v })}
                   />
                   <div>
-                    <div className="text-[9px] font-mono uppercase tracking-[0.16em] text-white/40">
-                      Direction
-                    </div>
+                    <div className="text-[9px] font-mono uppercase tracking-[0.16em] text-white/40">Direction</div>
                     <div className="mt-1 flex gap-1">
                       <button
                         onClick={() => updateOrbit(o.id, { direction: 1 })}
@@ -323,17 +495,13 @@ export function OrbitCanvas({ playing, muted }: OrbitCanvasProps) {
                     </div>
                   </div>
                   <div>
-                    <div className="text-[9px] font-mono uppercase tracking-[0.16em] text-white/40">
-                      Color
-                    </div>
+                    <div className="text-[9px] font-mono uppercase tracking-[0.16em] text-white/40">Color</div>
                     <div className="mt-1 flex flex-wrap gap-1">
                       {ORBIT_PALETTE.slice(0, 8).map((c) => (
                         <button
                           key={c}
                           onClick={() => updateOrbit(o.id, { color: c })}
-                          className={`h-5 w-5 rounded-full border ${
-                            o.color === c ? "border-white" : "border-transparent"
-                          }`}
+                          className={`h-5 w-5 rounded-full border ${o.color === c ? "border-white" : "border-transparent"}`}
                           style={{ background: c }}
                         />
                       ))}
@@ -370,7 +538,7 @@ function Slider({
 }) {
   return (
     <label className="block">
-      <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.16em] text-white/45">
+      <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.14em] text-white/45">
         <span>{label}</span>
         <span className="text-white/80">
           {value.toFixed(step < 1 ? 2 : 0)}
@@ -402,18 +570,12 @@ function Toggle({
   return (
     <button
       onClick={() => onChange(!value)}
-      className="flex w-full items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.16em] text-white/55 transition hover:border-white/15"
+      className="flex w-full items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.14em] text-white/55 transition hover:border-white/15"
     >
       <span>{label}</span>
-      <span
-        className={`h-4 w-7 rounded-full p-0.5 transition ${
-          value ? "bg-[#00FFAA]/80" : "bg-white/15"
-        }`}
-      >
+      <span className={`h-4 w-7 rounded-full p-0.5 transition ${value ? "bg-[#00FFAA]/80" : "bg-white/15"}`}>
         <span
-          className={`block h-3 w-3 rounded-full bg-white transition ${
-            value ? "translate-x-3" : "translate-x-0"
-          }`}
+          className={`block h-3 w-3 rounded-full bg-white transition ${value ? "translate-x-3" : "translate-x-0"}`}
         />
       </span>
     </button>

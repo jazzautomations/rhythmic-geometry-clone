@@ -32,18 +32,22 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
     startPerf: 0,
     lastFiredStep: -1,
     raf: 0,
+    flashes: new Map<string, number>(), // layerId -> flash
   });
   const [activeSceneId, setActiveSceneId] = useState(DEFAULT_STUDY_SCENES[0].id);
   const [bpm, setBpm] = useState(scene.baseBPM);
+  const [fftBg, setFftBg] = useState(true);
+  const [highlightIntersections, setHighlightIntersections] = useState(true);
 
   useEffect(() => {
-    getAudio().setMuted(muted);
+    getAudio().setSettings({ muted });
   }, [muted]);
 
   useEffect(() => {
     if (playing) {
       stateRef.current.startPerf = performance.now();
       stateRef.current.lastFiredStep = -1;
+      stateRef.current.flashes.clear();
       getAudio().resume();
     }
   }, [playing]);
@@ -65,6 +69,7 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
     setBpm(next.baseBPM);
     setActiveSceneId(id);
     stateRef.current.lastFiredStep = -1;
+    stateRef.current.flashes.clear();
   };
 
   const reset = () => loadScene(DEFAULT_STUDY_SCENES[0].id);
@@ -92,28 +97,54 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
 
     const draw = (now: number) => {
       const scn = sceneRef.current;
+      const st = stateRef.current;
+
       ctx.fillStyle = "#05070d";
       ctx.fillRect(0, 0, w, h);
+
+      // ---- Background FFT ----
+      if (fftBg) {
+        const fft = getAudio().getFFT();
+        if (fft && fft.length > 0) {
+          ctx.save();
+          ctx.globalCompositeOperation = "lighter";
+          const bars = 96;
+          const step = Math.floor(fft.length / bars);
+          for (let i = 0; i < bars; i++) {
+            const v = fft[i * step] / 255;
+            const barW = w / bars;
+            const barH = v * h * 0.18;
+            const hue = 200 - (i / bars) * 200;
+            const grad = ctx.createLinearGradient(0, 0, 0, barH);
+            grad.addColorStop(0, `hsla(${hue}, 80%, 60%, 0.4)`);
+            grad.addColorStop(1, `hsla(${hue}, 80%, 60%, 0)`);
+            ctx.fillStyle = grad;
+            ctx.fillRect(i * barW, 0, barW - 1, barH);
+          }
+          ctx.restore();
+        }
+      }
 
       const totalSteps = scn.stepsPerBar * scn.bars;
       const layerLcm = scn.layers.reduce((acc, l) => lcm(acc, l.pulseCount), 1);
       const effectiveSteps = Math.max(totalSteps, layerLcm);
 
-      const padX = 60;
-      const padTop = 50;
-      const padBot = 50;
+      const padX = 80;
+      const padTop = 60;
+      const padBot = 60;
       const usableW = w - padX * 2;
       const usableH = h - padTop - padBot;
       const rowH = usableH / Math.max(1, scn.layers.length);
       const stepW = usableW / effectiveSteps;
 
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
-      ctx.font = "10px ui-monospace, monospace";
+      // ---- Title ----
+      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      ctx.font = "11px ui-monospace, monospace";
       ctx.textAlign = "left";
       ctx.fillText(
         `${scn.layers.map((l) => l.label).join(" · ")}  ·  LCM = ${layerLcm}  ·  ${bpm} BPM`,
         padX,
-        26,
+        28,
       );
 
       const stepDurationSec = 60 / bpm;
@@ -121,48 +152,106 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
       const continuousStep = (elapsedSec / stepDurationSec) % effectiveSteps;
       const currentStep = Math.floor(continuousStep);
 
+      // ---- Detect intersections ----
+      const isIntersection = (s: number) => {
+        if (!highlightIntersections) return false;
+        return scn.layers.every((layer) => {
+          const pulseEvery = effectiveSteps / layer.pulseCount;
+          return s % Math.round(pulseEvery) === 0;
+        });
+      };
+
+      // ---- Rows ----
       scn.layers.forEach((layer, idx) => {
         const y = padTop + idx * rowH;
-        ctx.fillStyle = "rgba(255,255,255,0.02)";
-        ctx.fillRect(padX, y + 4, usableW, rowH - 8);
-        ctx.fillStyle = layer.color;
-        ctx.font = "11px ui-monospace, monospace";
-        ctx.textAlign = "right";
-        ctx.fillText(`1 : ${layer.pulseCount}`, padX - 12, y + rowH / 2 + 4);
+        const flash = st.flashes.get(layer.id) ?? 0;
 
+        // Row background with subtle flash
+        ctx.fillStyle = `rgba(255,255,255,${0.02 + flash * 0.04})`;
+        ctx.fillRect(padX, y + 4, usableW, rowH - 8);
+
+        // Label
+        ctx.fillStyle = layer.color;
+        ctx.font = "bold 13px ui-monospace, monospace";
+        ctx.textAlign = "right";
+        ctx.fillText(`1 : ${layer.pulseCount}`, padX - 14, y + rowH / 2 + 5);
+
+        // Cells
         const pulseEvery = effectiveSteps / layer.pulseCount;
         for (let s = 0; s < effectiveSteps; s++) {
           const cellX = padX + s * stepW;
           const isPulse = s % Math.round(pulseEvery) === 0;
           const isCurrent = s === currentStep && playing;
+          const intersection = isIntersection(s);
           if (isPulse) {
-            ctx.fillStyle = layer.color;
-            ctx.fillRect(cellX + 1, y + 8, Math.max(2, stepW - 2), rowH - 16);
-            if (isCurrent) {
-              ctx.fillStyle = "#ffffff";
-              ctx.fillRect(cellX + 1, y + 8, Math.max(2, stepW - 2), rowH - 16);
+            // Glow
+            ctx.save();
+            ctx.globalCompositeOperation = "lighter";
+            const glowSize = isCurrent ? rowH * 0.9 : rowH * 0.6;
+            const grad = ctx.createRadialGradient(
+              cellX + stepW / 2,
+              y + rowH / 2,
+              0,
+              cellX + stepW / 2,
+              y + rowH / 2,
+              glowSize,
+            );
+            grad.addColorStop(0, `${layer.color}${isCurrent ? "ff" : "aa"}`);
+            grad.addColorStop(1, `${layer.color}00`);
+            ctx.fillStyle = grad;
+            ctx.fillRect(cellX - 4, y + 4, stepW + 8, rowH - 8);
+            ctx.restore();
+
+            // Solid cell
+            ctx.fillStyle = isCurrent ? "#ffffff" : layer.color;
+            ctx.fillRect(cellX + 1, y + 10, Math.max(2, stepW - 2), rowH - 20);
+
+            if (intersection && idx === 0) {
+              // Vertical highlight bar for intersections
+              ctx.save();
+              ctx.globalCompositeOperation = "lighter";
+              const igrad = ctx.createLinearGradient(cellX, padTop, cellX, h - padBot);
+              igrad.addColorStop(0, "rgba(255,255,255,0.0)");
+              igrad.addColorStop(0.5, "rgba(255,255,255,0.18)");
+              igrad.addColorStop(1, "rgba(255,255,255,0.0)");
+              ctx.fillStyle = igrad;
+              ctx.fillRect(cellX, padTop, Math.max(2, stepW - 2), usableH);
+              ctx.restore();
             }
           } else {
+            // Faint tick
             ctx.fillStyle = "rgba(255,255,255,0.06)";
             ctx.fillRect(cellX + 1, y + rowH / 2 - 1, Math.max(1, stepW - 2), 2);
           }
         }
       });
 
+      // ---- Playhead ----
       if (playing) {
         const px = padX + continuousStep * stepW;
-        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        const grad = ctx.createLinearGradient(px - 8, 0, px + 8, 0);
+        grad.addColorStop(0, "rgba(255,255,255,0)");
+        grad.addColorStop(0.5, "rgba(255,255,255,0.7)");
+        grad.addColorStop(1, "rgba(255,255,255,0)");
+        ctx.fillStyle = grad;
+        ctx.fillRect(px - 8, padTop - 12, 16, h - padTop - padBot + 24);
+        ctx.restore();
+
+        ctx.strokeStyle = "rgba(255,255,255,0.9)";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
-        ctx.moveTo(px, padTop - 8);
-        ctx.lineTo(px, h - padBot + 8);
+        ctx.moveTo(px, padTop - 12);
+        ctx.lineTo(px, h - padBot + 12);
         ctx.stroke();
         ctx.fillStyle = "#ffffff";
         ctx.beginPath();
-        ctx.arc(px, padTop - 8, 3, 0, Math.PI * 2);
+        ctx.arc(px, padTop - 12, 4, 0, Math.PI * 2);
         ctx.fill();
       }
 
+      // ---- Bar markers ----
       ctx.strokeStyle = "rgba(255,255,255,0.18)";
       ctx.lineWidth = 1;
       ctx.font = "9px ui-monospace, monospace";
@@ -183,29 +272,39 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
         }
       }
 
-      if (playing && currentStep !== stateRef.current.lastFiredStep && !muted) {
-        stateRef.current.lastFiredStep = currentStep;
-        for (const layer of scn.layers) {
-          const pulseEvery = effectiveSteps / layer.pulseCount;
-          if (currentStep % Math.round(pulseEvery) === 0) {
-            getAudio().blip({
-              color: layer.color,
-              orbitId: layer.id,
-              velocity: scn.layers.length,
-              duration: 0.15,
-            });
-          }
-        }
+      // ---- Decay flashes ----
+      for (const [k, v] of st.flashes) {
+        st.flashes.set(k, v * 0.85);
+        if (v < 0.02) st.flashes.delete(k);
       }
 
-      stateRef.current.raf = requestAnimationFrame(draw);
+      // ---- Audio firing ----
+      if (playing && currentStep !== stateRef.current.lastFiredStep && !muted) {
+        stateRef.current.lastFiredStep = currentStep;
+        scn.layers.forEach((layer, idx) => {
+          const pulseEvery = effectiveSteps / layer.pulseCount;
+          if (currentStep % Math.round(pulseEvery) === 0) {
+            const pan = idx % 2 === 0 ? 0.3 : -0.3;
+            getAudio().blip({
+              color: layer.color,
+              voiceId: layer.id,
+              velocity: scn.layers.length,
+              duration: 0.4,
+              pan,
+            });
+            st.flashes.set(layer.id, 1);
+          }
+        });
+      }
+
+      st.raf = requestAnimationFrame(draw);
     };
     stateRef.current.raf = requestAnimationFrame(draw);
     return () => {
       cancelAnimationFrame(stateRef.current.raf);
       ro.disconnect();
     };
-  }, [playing, muted, scene, bpm]);
+  }, [playing, muted, scene, bpm, fftBg, highlightIntersections]);
 
   const addLayer = () => {
     setScene((prev) => {
@@ -264,6 +363,8 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.14em] text-white/55">
             Layers · {scene.layers.length}  ·  LCM = {layerLcm}
           </div>
+          <Toggle label="FFT Background" value={fftBg} onChange={setFftBg} />
+          <Toggle label="Highlight Intersections" value={highlightIntersections} onChange={setHighlightIntersections} />
         </>
       }
       editor={
@@ -315,9 +416,7 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
                         <button
                           key={c}
                           onClick={() => updateLayer(l.id, { color: c })}
-                          className={`h-5 w-5 rounded-full border ${
-                            l.color === c ? "border-white" : "border-transparent"
-                          }`}
+                          className={`h-5 w-5 rounded-full border ${l.color === c ? "border-white" : "border-transparent"}`}
                           style={{ background: c }}
                         />
                       ))}
@@ -328,8 +427,8 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
             ))}
           </div>
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] leading-6 text-white/55">
-            Watch when pulses stack vertically — that&apos;s where the rhythms align. The LCM at the top tells
-            you how long until the full pattern returns.
+            Watch when pulses stack vertically — that&apos;s where the rhythms align. The vertical white bars
+            mark intersections where every layer pulses together.
           </div>
         </div>
       }
@@ -358,7 +457,7 @@ function Slider({
 }) {
   return (
     <label className="block">
-      <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.16em] text-white/45">
+      <div className="flex items-center justify-between text-[10px] font-mono uppercase tracking-[0.14em] text-white/45">
         <span>{label}</span>
         <span className="text-white/80">
           {value.toFixed(step < 1 ? 2 : 0)}
@@ -375,6 +474,30 @@ function Slider({
         className="mt-1.5 w-full accent-[#7FD7FF]"
       />
     </label>
+  );
+}
+
+function Toggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      onClick={() => onChange(!value)}
+      className="flex w-full items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.14em] text-white/55 transition hover:border-white/15"
+    >
+      <span>{label}</span>
+      <span className={`h-4 w-7 rounded-full p-0.5 transition ${value ? "bg-[#7FD7FF]/80" : "bg-white/15"}`}>
+        <span
+          className={`block h-3 w-3 rounded-full bg-white transition ${value ? "translate-x-3" : "translate-x-0"}`}
+        />
+      </span>
+    </button>
   );
 }
 
