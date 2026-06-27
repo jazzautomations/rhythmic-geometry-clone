@@ -1,5 +1,9 @@
 // Upgraded Web Audio engine — reverse-engineered from rhythmicgeometry.com
-// and pushed to a proper synth:
+// and pushed to a proper synth. Now uses the 5 TONE_PRESETS verbatim
+// from the original bundle (Glass / Deep / Rain / Dream / Warm) with their
+// exact keyCenter, noteSet, reverb, delay, filter and warmth values.
+//
+// Voice stack:
 //   - Stacked oscillators (sine + triangle + sub) for richer timbre
 //   - Per-voice lowpass filter with envelope
 //   - Convolver reverb with synthesized impulse response
@@ -9,6 +13,9 @@
 //   - Drum synthesis (kick with pitch drop, snare with noise burst, hat with filtered noise)
 
 import { colorToFreq, midiToFreq } from "./types";
+import { TONE_PRESETS, type TonePreset, type Cycle } from "./presets";
+
+type CycleType = Cycle["type"];
 
 const PENTATONIC_FREQS = [
   130.81, 146.83, 164.81, 196.0, 220.0,
@@ -43,6 +50,7 @@ export interface AudioSettings {
   scale: keyof typeof SCALES;
   rootNote: number; // 0..11 (C=0)
   muted: boolean;
+  tonePresetId: string; // one of TONE_PRESETS — overrides reverb/delay/filter when applied
 }
 
 export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
@@ -58,8 +66,9 @@ export const DEFAULT_AUDIO_SETTINGS: AudioSettings = {
   subOsc: true,
   triangleLayer: true,
   scale: "majorPentatonic",
-  rootNote: 0, // C
+  rootNote: 0,
   muted: false,
+  tonePresetId: "glass",
 };
 
 // Build a synthesized impulse response for the convolver.
@@ -221,6 +230,32 @@ class AudioEngine {
     }
   }
 
+  // Apply one of the 5 verbatim TonePresets from the original bundle.
+  // Maps the preset's reverb/delay/filter values directly into audio settings.
+  applyTonePreset(preset: TonePreset) {
+    this.setSettings({
+      tonePresetId: preset.id,
+      reverbAmount: preset.reverb,
+      delayAmount: preset.delay,
+      filterCutoff: preset.filter,
+      // warmth maps onto subOsc + triangle layer: warm presets keep both on,
+      // bright presets drop the sub. padMix maps onto release length.
+      subOsc: preset.warmth > 0.55,
+      triangleLayer: true,
+      release: 0.25 + preset.padMix * 0.6,
+      attack: 0.004,
+    });
+  }
+
+  // Resolve a MIDI note from a noteIndex into the active TonePreset's noteSet.
+  noteIndexToMidi(noteIndex: number): number {
+    const preset =
+      TONE_PRESETS.find((p) => p.id === this.settings.tonePresetId) ?? TONE_PRESETS[0];
+    const offset = preset.noteSet[noteIndex % preset.noteSet.length] ?? 0;
+    const octave = Math.floor(noteIndex / preset.noteSet.length);
+    return preset.keyCenter + offset + octave * 12;
+  }
+
   getSettings(): AudioSettings {
     return this.settings;
   }
@@ -284,13 +319,16 @@ class AudioEngine {
   }
 
   // The main "blip" — a stacked synth voice with filter envelope.
+  // If `noteIndex` is supplied, resolves through the active TonePreset's noteSet.
   blip(opts: {
     color?: string;
     freq?: number;
+    noteIndex?: number;
     voiceId: string;
     velocity?: number;
     duration?: number;
     pan?: number; // -1..1
+    type?: CycleType;
   }) {
     if (this.settings.muted) return;
     try {
@@ -299,12 +337,29 @@ class AudioEngine {
       const rate = this.fireRate();
       if (this.throttled(opts.voiceId, rate)) return;
 
-      const freq = opts.freq ?? this.colorToScaleFreq(opts.color ?? "#00FFAA");
+      // Resolve frequency: explicit > noteIndex (via TonePreset) > color hue
+      let freq: number;
+      if (opts.freq) {
+        freq = opts.freq;
+      } else if (typeof opts.noteIndex === "number") {
+        freq = midiToFreq(this.noteIndexToMidi(opts.noteIndex));
+      } else {
+        freq = this.colorToScaleFreq(opts.color ?? "#00FFAA");
+      }
+
+      const type = opts.type ?? "tone";
       const velocity = Math.max(1, opts.velocity ?? 1);
-      const peakAmp = Math.min(0.22, 0.22 / Math.sqrt(velocity));
+      // Type-based amplitude/timbre tweaks (mirrors the original `yr` defaults)
+      const typeBoost = type === "bass" ? 1.4 : type === "spark" ? 0.55 : type === "ghost" ? 0.35 : 1;
+      const peakAmp = Math.min(0.28, (0.22 / Math.sqrt(velocity)) * typeBoost);
       const duration = opts.duration ?? this.settings.release;
       const pan = opts.pan ?? 0;
       const attack = this.settings.attack;
+
+      // Bass voices: drop an octave
+      if (type === "bass") freq *= 0.5;
+      // Spark voices: bump an octave
+      if (type === "spark") freq *= 2;
 
       // ---- Voice bus ----
       const voiceBus = ctx.createGain();

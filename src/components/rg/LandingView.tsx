@@ -6,453 +6,609 @@ import {
   CircleDot,
   Layers,
   SquarePlay,
-  Waves,
-  MonitorPlay,
   GalleryVerticalEnd,
+  MonitorPlay,
+  Waves,
   Sparkles,
 } from "lucide-react";
 import { MODES, ORBIT_PALETTE } from "@/lib/rg/types";
-import { useRG } from "@/lib/rg/store";
+import { ORBIT_SCENES, TOOLS, PRO_FEATURES } from "@/lib/rg/presets";
+import { useRG, getOrbitScene } from "@/lib/rg/store";
 import { OrbitPreview } from "./previews/OrbitPreview";
+
+// Verbatim copy from rhythmicgeometry.com landing.
+const SCENE_IMAGE_MAP: Record<string, string> = {
+  prime_ritual: "https://rhythmicgeometry.com/scene-captures/website_prime_ritual.png",
+  rose_engine: "https://rhythmicgeometry.com/scene-captures/website_rose_engine.png",
+  blue_mandala: "https://rhythmicgeometry.com/scene-captures/website_standard_replacement.png",
+  metallic_whorl: "https://rhythmicgeometry.com/scene-captures/website_metallic_whorl.png",
+};
+
+const SHOWCASE_SCENES = [
+  "prime_ritual",
+  "rose_engine",
+  "blue_mandala",
+  "metallic_whorl",
+].map((id, i) => {
+  const preset = getOrbitScene(id === "prime_ritual" ? "deep-moons" : id === "rose_engine" ? "mandala-bells" : id === "blue_mandala" ? "blue-mandala" : "star-bloom");
+  return {
+    id,
+    title: preset.name,
+    description: preset.description,
+    accent: ["#00FFAA", "#88CCFF", "#FFAA00", "#66DDFF"][i % 4],
+    image: SCENE_IMAGE_MAP[id],
+    palette: preset.palette,
+    cycles: preset.cycles,
+    tempo: preset.tempo,
+  };
+});
+
+const ICONS: Record<string, typeof CircleDot> = {
+  Library: GalleryVerticalEnd,
+  Edit: SquarePlay,
+  Capture: MonitorPlay,
+  Fullscreen: CircleDot,
+  Layouts: Layers,
+  Entry: Waves,
+};
 
 export function LandingView() {
   const goApp = useRG((s) => s.goApp);
   const goLaunch = useRG((s) => s.goLaunch);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#05070d] text-white">
-      {/* Background aurora + grid */}
-      <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute inset-0 opacity-90 rg-glow-aurora" />
-        <div className="absolute inset-0 opacity-25 rg-grid-bg" />
+    <div className="relative min-h-screen overflow-hidden bg-[#090a10] text-white">
+      {/* Background — exact radial gradient + grid + concentric rings from original */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div
+          className="absolute inset-0 opacity-90"
+          style={{
+            background:
+              "radial-gradient(circle at 18% 18%, rgba(0,255,170,0.07), transparent 28%), radial-gradient(circle at 80% 20%, rgba(127,215,255,0.08), transparent 26%), radial-gradient(circle at 70% 76%, rgba(255,209,102,0.08), transparent 24%), linear-gradient(180deg, #090a10 0%, #0d1017 48%, #090a10 100%)",
+          }}
+        />
+        <div
+          className="absolute inset-0 opacity-20"
+          style={{
+            backgroundImage:
+              "linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px)",
+            backgroundSize: "72px 72px",
+            maskImage:
+              "linear-gradient(180deg, rgba(0,0,0,0.9), rgba(0,0,0,0.55), rgba(0,0,0,0.9))",
+            WebkitMaskImage:
+              "linear-gradient(180deg, rgba(0,0,0,0.9), rgba(0,0,0,0.55), rgba(0,0,0,0.9))",
+          }}
+        />
+        {/* Concentric rings (verbatim from original) */}
+        <div className="absolute left-1/2 top-28 h-[44rem] w-[44rem] -translate-x-1/2 rounded-full border border-white/[0.06]" />
+        <div className="absolute left-1/2 top-28 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full border border-[#3388ff]/10" />
+        <div className="absolute left-1/2 top-28 h-[21rem] w-[21rem] -translate-x-1/2 rounded-full border border-[#ff3366]/10" />
+        <div className="absolute left-1/2 top-28 h-[12rem] w-[12rem] -translate-x-1/2 rounded-full border border-[#00ffaa]/12" />
       </div>
 
-      {/* Header */}
-      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#05070d]/70 backdrop-blur-xl">
+      {/* Header — exact copy from original */}
+      <header className="sticky top-0 z-40 border-b border-white/[0.06] bg-[#090a10]/70 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 sm:px-8">
-          <div className="flex items-center gap-2 text-[12px] font-medium uppercase tracking-[0.28em] text-white/78">
-            <span className="inline-block h-2 w-2 rounded-full bg-[#00FFAA] shadow-[0_0_12px_#00FFAA]" />
-            Rhythmic Geometry
-          </div>
-          <nav className="hidden items-center gap-7 text-[11px] font-mono uppercase tracking-[0.18em] text-white/55 md:flex">
-            <a href="#modes" className="transition hover:text-white">
+          <button onClick={() => useRG.getState().goHome()} className="group block">
+            <div className="text-[15px] font-medium uppercase tracking-[0.34em] text-white/82 transition-colors group-hover:text-white sm:text-[17px]">
+              Rhythmic Geometry
+              <span className="align-super text-[0.52em] tracking-[0.08em]">™</span>
+            </div>
+          </button>
+          <nav className="hidden items-center gap-6 text-[12px] font-mono uppercase tracking-[0.14em] text-white/54 md:flex">
+            <a href="#modes" className="transition-colors hover:text-white">
               Modes
             </a>
-            <a href="#showcase" className="transition hover:text-white">
+            <a href="#showcase" className="transition-colors hover:text-white">
               Showcase
             </a>
-            <a href="#tools" className="transition hover:text-white">
+            <a href="#philosophy" className="transition-colors hover:text-white">
+              What Is It?
+            </a>
+            <a href="#tools" className="transition-colors hover:text-white">
               Tools
             </a>
-            <a href="#philosophy" className="transition hover:text-white">
-              Why
+            <a href="#pro" className="transition-colors hover:text-white">
+              Pro
             </a>
           </nav>
-          <button
-            onClick={() => goLaunch()}
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-[11px] font-mono uppercase tracking-[0.14em] text-white/78 transition hover:border-[#00FFAA]/40 hover:text-white"
-          >
-            Open App
-            <ArrowRight size={13} />
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => goLaunch()}
+              className="inline-flex items-center gap-2 rounded-full border border-[#00ffaa]/25 bg-[#00ffaa]/12 px-4 py-2 text-[11px] font-mono uppercase tracking-[0.14em] text-[#00ffaa] transition hover:bg-[#00ffaa]/18"
+            >
+              Launch App
+              <ArrowRight size={14} />
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative px-5 pt-24 pb-28 sm:px-8 sm:pt-32 sm:pb-36">
-        <div className="mx-auto max-w-5xl text-center">
+      <main>
+        {/* HERO — exact copy from original */}
+        <section className="px-5 pt-20 pb-24 sm:px-8 sm:pt-28">
           <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7 }}
-            className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-[10px] font-mono uppercase tracking-[0.22em] text-white/58"
-          >
-            <Sparkles size={11} className="text-[#00FFAA]" />
-            Reverse-engineered clone · Next.js + Web Audio
-          </motion.div>
-          <motion.h1
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.05 }}
-            className="rg-font-serif text-[3.5rem] font-light leading-[0.92] tracking-[-0.05em] sm:text-[5.5rem] lg:text-[7rem]"
+            transition={{ duration: 0.7 }}
+            className="mx-auto grid max-w-7xl gap-8 sm:gap-12 lg:grid-cols-[0.84fr_1.16fr] lg:items-end"
           >
-            See rhythm
-            <br />
-            as <span className="italic text-[#00FFAA]">motion</span>, shape,
-            <br />
-            and return.
-          </motion.h1>
-          <motion.p
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.15 }}
-            className="mx-auto mt-9 max-w-2xl text-[15px] leading-8 text-white/64 sm:text-base"
-          >
-            A visual rhythm tool for seeing polymeters, riffs, orbits, and musical structures as motion and shape.
-            Three connected surfaces, one shared geometry engine — every pulse becomes light, every cycle leaves a
-            trace.
-          </motion.p>
-          <motion.div
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.25 }}
-            className="mt-12 flex flex-wrap items-center justify-center gap-3"
-          >
-            <button
-              onClick={() => goApp("orbital")}
-              className="group inline-flex items-center gap-2 rounded-full bg-[#00FFAA] px-7 py-3.5 text-[12px] font-mono uppercase tracking-[0.16em] text-[#05070d] transition hover:shadow-[0_0_40px_rgba(0,255,170,0.45)]"
-            >
-              Enter Orbit
-              <ArrowRight size={14} className="transition group-hover:translate-x-1" />
-            </button>
-            <button
-              onClick={() => goLaunch()}
-              className="inline-flex items-center gap-2 rounded-full border border-white/12 px-7 py-3.5 text-[12px] font-mono uppercase tracking-[0.16em] text-white/82 transition hover:border-white/25 hover:text-white"
-            >
-              Choose a mode
-            </button>
-          </motion.div>
-        </div>
+            <div className="flex max-w-2xl flex-col items-center sm:block">
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-[11px] font-mono uppercase tracking-[0.16em] text-white/62">
+                <Sparkles size={14} className="text-[#7fd7ff]" />
+                See The Structure Inside Rhythm
+              </div>
+              <h1 className="mt-8 w-fit text-center font-serif text-[2.15rem] font-light tracking-[-0.05em] leading-[0.92] text-white sm:mt-14 sm:max-w-2xl sm:w-auto sm:text-left sm:text-[4.25rem] sm:leading-[0.94] lg:text-[5rem]">
+                Rhythm
+                <br />
+                Visualized
+                <br />
+                Through
+                <br />
+                Geometry
+              </h1>
+              <p className="mt-6 max-w-lg text-center text-base leading-7 text-white/64 sm:mt-12 sm:max-w-xl sm:text-left sm:text-lg sm:leading-8">
+                A moving visual instrument for exploring rhythm as structure.
+                <br />
+                <br />
+                Set simple ratios. Watch them unfold into motion, pattern, and form.
+              </p>
+              <p className="mt-8 hidden max-w-xl text-center text-sm leading-8 text-white/44 sm:block sm:text-left sm:text-base">
+                What you hear as rhythm... reveals itself as geometry over time.
+              </p>
 
-        {/* Floating orbit preview */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 1, delay: 0.35 }}
-          className="relative mx-auto mt-20 max-w-3xl"
-        >
-          <div className="relative aspect-[16/10] overflow-hidden rounded-[2rem] border border-white/10 bg-[#0a0d14] shadow-[0_50px_180px_rgba(0,0,0,0.55)]">
-            <OrbitPreview />
-            <div className="absolute left-5 top-5 rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.2em] text-white/65 backdrop-blur-md">
-              Live · Orbit preview
-            </div>
-          </div>
-        </motion.div>
-      </section>
-
-      {/* Modes */}
-      <section id="modes" className="px-5 py-24 sm:px-8 sm:py-28">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-14 max-w-2xl">
-            <div className="mb-4 text-[11px] font-mono uppercase tracking-[0.22em] text-[#00FFAA]/85">
-              Three modes · one engine
-            </div>
-            <h2 className="rg-font-serif text-4xl font-light leading-[1] tracking-[-0.04em] sm:text-5xl">
-              Each surface reveals a different angle of the same geometry.
-            </h2>
-          </div>
-
-          <div className="grid gap-5 lg:grid-cols-3">
-            {MODES.map((m, i) => (
-              <motion.button
-                key={m.id}
-                onClick={() => goApp(m.id)}
-                initial={{ opacity: 0, y: 24 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-80px" }}
-                transition={{ duration: 0.6, delay: i * 0.08 }}
-                className="group relative flex min-h-[28rem] flex-col overflow-hidden rounded-[2rem] border border-white/[0.08] bg-[#0c0f16] p-7 text-left transition hover:border-white/[0.18]"
-              >
-                <div
-                  className="pointer-events-none absolute inset-0 opacity-60 transition group-hover:opacity-90"
-                  style={{
-                    background: `radial-gradient(circle at 20% 10%, ${m.accent}22, transparent 35%), radial-gradient(circle at 80% 90%, rgba(255,255,255,0.06), transparent 30%)`,
-                  }}
-                />
-                <div className="relative flex items-start justify-between">
-                  <div
-                    className="rounded-full border px-3 py-1 text-[10px] font-mono uppercase tracking-[0.18em]"
+              {/* Mode launch buttons */}
+              <div className="mt-14 hidden flex-wrap items-center gap-4 sm:flex">
+                {MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => goApp(m.id)}
+                    className="inline-flex items-center gap-2 rounded-full border px-5 py-3 text-[12px] font-mono uppercase tracking-[0.14em] transition"
                     style={{
                       borderColor: `${m.accent}30`,
-                      color: m.accent,
-                      background: `${m.accent}10`,
-                    }}
-                  >
-                    {m.eyebrow}
-                  </div>
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-xl border"
-                    style={{
                       background: `${m.accent}12`,
-                      borderColor: `${m.accent}22`,
                       color: m.accent,
                     }}
                   >
-                    {m.id === "orbital" ? (
-                      <CircleDot size={16} />
-                    ) : m.id === "polyrhythm-study" ? (
-                      <Layers size={16} />
-                    ) : (
-                      <SquarePlay size={16} />
-                    )}
+                    {m.launchLabel}
+                    <ArrowRight size={15} />
+                  </button>
+                ))}
+              </div>
+
+              {/* Mini mode cards */}
+              <div className="mt-12 hidden gap-3 sm:grid sm:grid-cols-3">
+                {MODES.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => goApp(m.id)}
+                    className="rounded-[1.25rem] border border-white/[0.08] bg-white/[0.02] px-4 py-4 text-left transition hover:bg-white/[0.04]"
+                    style={{
+                      borderColor: `${m.accent}30`,
+                      boxShadow: `0 0 48px ${m.accent}22, inset 0 1px 0 rgba(255,255,255,0.06)`,
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div
+                        className="text-[10px] font-mono uppercase tracking-[0.16em]"
+                        style={{ color: m.accent }}
+                      >
+                        {m.name}
+                      </div>
+                      {m.id === "orbital" ? (
+                        <CircleDot size={15} style={{ color: m.accent }} />
+                      ) : m.id === "polyrhythm-study" ? (
+                        <Layers size={15} style={{ color: m.accent }} />
+                      ) : (
+                        <SquarePlay size={15} style={{ color: m.accent }} />
+                      )}
+                    </div>
+                    <div className="mt-3 text-sm leading-6 text-white/60">{m.bestFor}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Hero preview canvas */}
+            <div className="relative">
+              <div
+                className="absolute inset-0 rounded-[2rem] blur-3xl sm:rounded-[2.6rem]"
+                style={{
+                  background: `radial-gradient(circle at 30% 24%, #00FFAA34, transparent 30%), radial-gradient(circle at 74% 26%, rgba(255,255,255,0.14), transparent 20%), radial-gradient(circle at 70% 72%, #00FFAA14, transparent 26%), linear-gradient(180deg, rgba(9,10,16,0.22), rgba(9,10,16,0.02))`,
+                }}
+              />
+              <div className="relative overflow-hidden rounded-[1.9rem] border border-white/10 bg-[#0b0e14]/82 shadow-[0_30px_110px_rgba(0,0,0,0.42)] backdrop-blur-xl sm:rounded-[2.5rem] sm:shadow-[0_40px_160px_rgba(0,0,0,0.5)]">
+                <div className="border-b border-white/10 px-5 py-4 sm:px-6 sm:py-5">
+                  <div className="mx-auto flex max-w-xl flex-col items-center text-center">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#00FFAA]">
+                      See rhythm as motion.
+                    </div>
+                    <div className="mt-2 font-serif text-[1.6rem] font-light tracking-[-0.05em] leading-[0.95] text-white sm:text-[2.05rem]">
+                      Orbit
+                    </div>
+                    <p className="mt-2 hidden text-sm leading-7 text-white/58 sm:block">
+                      Every ratio becomes a path. Every cycle leaves a shape.
+                    </p>
                   </div>
                 </div>
-                <h3 className="relative mt-7 rg-font-serif text-[2.4rem] font-light tracking-[-0.04em]">
-                  {m.name}
-                </h3>
-                <p className="relative mt-3 text-sm leading-7 text-white/64">{m.summary}</p>
-                <p className="relative mt-4 text-[13px] leading-7 text-white/45">{m.description}</p>
-                <div className="relative mt-auto flex items-center gap-2 pt-7 text-[11px] font-mono uppercase tracking-[0.16em] transition group-hover:translate-x-1"
-                  style={{ color: m.accent }}
-                >
-                  {m.launchLabel}
-                  <ArrowRight size={13} />
+                <div className="relative h-[14.5rem] overflow-hidden sm:aspect-[1.08/0.86] sm:h-auto">
+                  <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(9,10,16,0.08),rgba(9,10,16,0.2)_36%,rgba(9,10,16,0.72)_100%)]" />
+                  <div
+                    className="absolute inset-0 opacity-60"
+                    style={{
+                      background:
+                        "radial-gradient(circle at 20% 22%, #00FFAA26, transparent 24%), radial-gradient(circle at 74% 20%, rgba(255,255,255,0.12), transparent 18%), radial-gradient(circle at 70% 76%, #00FFAA16, transparent 24%)",
+                    }}
+                  />
+                  <div className="absolute inset-[1rem] rounded-[1.2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_20px_48px_rgba(0,0,0,0.28)] sm:inset-[3.1rem] sm:rounded-[2rem] sm:shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_30px_80px_rgba(0,0,0,0.34)]">
+                    <div className="absolute inset-[0.7rem] overflow-hidden rounded-[0.95rem] bg-[radial-gradient(circle_at_50%_40%,rgba(255,255,255,0.06),rgba(9,10,16,0.22)_52%,rgba(9,10,16,0.92)_100%)] sm:inset-[1.35rem] sm:rounded-[1.4rem]">
+                      <OrbitPreview
+                        orbits={ORBIT_SCENES[0].cycles.map((c) => ({
+                          pulseCount: c.pulseCount,
+                          radius: 40 + c.noteIndex * 8,
+                          color: c.color,
+                          direction: c.noteIndex % 2 === 0 ? 1 : -1,
+                          offsetTurns: c.phase ?? 0,
+                        }))}
+                        bpm={ORBIT_SCENES[0].tempo}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </motion.button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Showcase */}
-      <section id="showcase" className="px-5 py-24 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-12 flex items-end justify-between gap-6">
-            <div>
-              <div className="mb-4 text-[11px] font-mono uppercase tracking-[0.22em] text-[#7FD7FF]/85">
-                Built-in scenes
+                <div className="hidden gap-3 border-t border-white/10 px-6 py-6 md:grid-cols-[1fr_1fr] sm:grid">
+                  <div className="rounded-[1.4rem] border border-white/10 bg-black/24 p-4 backdrop-blur-md">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/34">
+                      Best for
+                    </div>
+                    <div className="mt-2 text-sm leading-7 text-white/68">
+                      Seeing rhythm as motion.
+                    </div>
+                  </div>
+                  <div className="rounded-[1.4rem] border border-white/10 bg-black/24 p-4 backdrop-blur-md">
+                    <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/34">
+                      First move
+                    </div>
+                    <div className="mt-2 text-sm leading-7 text-white/68">
+                      Set a simple ratio and press Play.
+                    </div>
+                  </div>
+                </div>
               </div>
-              <h2 className="rg-font-serif text-4xl font-light leading-[1] tracking-[-0.04em] sm:text-5xl">
-                Start from a scene, not a blank canvas.
+            </div>
+          </motion.div>
+        </section>
+
+        {/* MODES — exact copy */}
+        <section
+          id="modes"
+          className="border-y border-white/[0.12] bg-[linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.015))] px-5 py-18 sm:px-8 sm:py-24"
+        >
+          <div className="mx-auto max-w-7xl lg:grid lg:grid-cols-[0.6fr_0.4fr] lg:gap-14">
+            <div>
+              <div className="max-w-2xl">
+                <div className="inline-flex items-center rounded-full border border-[#7FD7FF]/20 bg-[#7FD7FF]/[0.08] px-4 py-2 text-[11px] font-mono uppercase tracking-[0.2em] text-[#7FD7FF] shadow-[0_0_24px_rgba(127,215,255,0.08)]">
+                  Three Clear Entries
+                </div>
+                <h2 className="mt-4 font-serif text-3xl font-light tracking-[-0.04em] text-white sm:text-5xl sm:leading-[0.98]">
+                  The Instrument
+                </h2>
+                <p className="mt-5 max-w-2xl text-sm leading-8 text-white/48 sm:text-base">
+                  Not a visualization. A system.
+                </p>
+                <p className="mt-4 max-w-2xl text-sm leading-8 text-white/48 sm:text-base">
+                  Rhythmic Geometry™ is a space for discovery. Simple inputs create complex results —
+                  patterns that emerge, repeat, and transform over time.
+                </p>
+                <p className="mt-4 max-w-2xl text-sm leading-8 text-white/42 sm:text-base">
+                  Set constraints. Watch structure appear.
+                </p>
+              </div>
+
+              <div className="mt-12 space-y-10 lg:space-y-0">
+                {MODES.map((m) => (
+                  <div key={m.id} className="lg:flex lg:min-h-[78vh] lg:items-center">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      viewport={{ once: true, margin: "-80px" }}
+                      transition={{ duration: 0.55 }}
+                      className="max-w-xl rounded-[2rem] border border-white/[0.08] bg-white/[0.02] p-6 sm:p-8"
+                      style={{
+                        borderColor: `${m.accent}30`,
+                        boxShadow: `0 0 80px ${m.accent}10, inset 0 1px 0 rgba(255,255,255,0.06)`,
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div
+                          className="text-[10px] font-mono uppercase tracking-[0.18em]"
+                          style={{ color: m.accent }}
+                        >
+                          {m.eyebrow}
+                        </div>
+                        <div
+                          className="flex h-10 w-10 items-center justify-center rounded-2xl border"
+                          style={{
+                            background: `${m.accent}12`,
+                            borderColor: `${m.accent}1f`,
+                            color: m.accent,
+                          }}
+                        >
+                          {m.id === "orbital" ? (
+                            <CircleDot size={16} />
+                          ) : m.id === "polyrhythm-study" ? (
+                            <Layers size={16} />
+                          ) : (
+                            <SquarePlay size={16} />
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-5 font-serif text-[2.65rem] font-light tracking-[-0.05em] leading-[0.95] text-white">
+                        {m.name}
+                      </div>
+                      <p className="mt-4 text-lg leading-8 text-white/72">{m.eyebrow}</p>
+                      <p className="mt-5 text-sm leading-8 text-white/58">{m.description}</p>
+                      <div className="mt-6 border-t border-white/10 pt-6">
+                        <div className="rounded-[1.3rem] border border-white/8 bg-[#090a10]/72 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                          <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/34">
+                            Form
+                          </div>
+                          <div className="mt-2 text-sm leading-7 text-white/66">{m.summary}</div>
+                        </div>
+                      </div>
+                      <div className="mt-6 border-t border-white/10 pt-6">
+                        <div className="space-y-3">
+                          {m.details.slice(0, 2).map((d) => (
+                            <div key={d} className="flex items-start gap-3 text-sm leading-7 text-white/62">
+                              <div
+                                className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full"
+                                style={{ background: m.accent, boxShadow: `0 0 10px ${m.accent}` }}
+                              />
+                              <span>{d}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="mt-7">
+                        <button
+                          onClick={() => goApp(m.id)}
+                          className="inline-flex items-center gap-2 rounded-full border px-5 py-3 text-[12px] font-mono uppercase tracking-[0.14em] transition"
+                          style={{
+                            borderColor: `${m.accent}30`,
+                            background: `${m.accent}12`,
+                            color: m.accent,
+                            boxShadow: `0 0 26px ${m.accent}10`,
+                          }}
+                        >
+                          {m.launchLabel}
+                          <ArrowRight size={15} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* SHOWCASE — exact copy */}
+        <section
+          id="showcase"
+          className="border-y border-white/10 px-5 py-18 sm:px-8 sm:py-24"
+        >
+          <div className="mx-auto max-w-7xl">
+            <div className="max-w-2xl">
+              <div className="inline-flex items-center rounded-full border border-[#00FFAA]/20 bg-[#00FFAA]/[0.08] px-4 py-2 text-[11px] font-mono uppercase tracking-[0.2em] text-[#00FFAA] shadow-[0_0_24px_rgba(0,255,170,0.08)]">
+                Orbits Showcase
+              </div>
+              <h2 className="mt-4 font-serif text-3xl font-light tracking-[-0.04em] text-white sm:text-5xl sm:leading-[0.98]">
+                Orbits scenes where moving ratios leave visible form behind.
               </h2>
             </div>
-            <button
-              onClick={() => goApp("orbital")}
-              className="hidden shrink-0 items-center gap-2 rounded-full border border-white/12 px-5 py-2.5 text-[11px] font-mono uppercase tracking-[0.14em] text-white/75 transition hover:border-white/25 hover:text-white sm:inline-flex"
-            >
-              Open in Orbit
-              <ArrowRight size={12} />
-            </button>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {SHOWCASE_SCENES.map((s, i) => (
-              <motion.div
-                key={s.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.55, delay: i * 0.06 }}
-                className="group relative aspect-square overflow-hidden rounded-[1.5rem] border border-white/[0.08] bg-[#0c0f16] transition hover:border-white/[0.18]"
-              >
-                <div
-                  className="absolute inset-0 opacity-70 transition group-hover:opacity-100"
-                  style={{
-                    background: `radial-gradient(circle at 50% 50%, ${s.accent}30, transparent 60%), radial-gradient(circle at 20% 80%, ${s.accent2}25, transparent 55%)`,
-                  }}
-                />
-                <OrbitPreview
-                  seed={s.id}
-                  orbits={s.orbits}
-                  className="absolute inset-0"
-                  small
-                />
-                <div className="absolute inset-0 flex flex-col justify-end p-5">
-                  <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-white/50">
-                    Orbit Scene
+            <div className="mt-10 grid gap-5 md:grid-cols-2">
+              {SHOWCASE_SCENES.map((s, i) => (
+                <motion.button
+                  key={s.id}
+                  onClick={() => goApp("orbital")}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, margin: "-60px" }}
+                  transition={{ duration: 0.55, delay: i * 0.05 }}
+                  className="group overflow-hidden rounded-[1.8rem] border border-white/8 bg-white/[0.03] text-left shadow-[0_24px_80px_rgba(0,0,0,0.24)] transition hover:border-white/14 hover:bg-white/[0.045]"
+                >
+                  <div className="flex items-center justify-between px-5 pt-5">
+                    <div
+                      className="text-[10px] font-mono uppercase tracking-[0.16em]"
+                      style={{ color: s.accent }}
+                    >
+                      {i === 0 ? "Featured Orbits Scene" : "Orbits Scene"}
+                    </div>
+                    <ArrowRight size={14} style={{ color: s.accent }} />
                   </div>
-                  <div className="mt-1 rg-font-serif text-2xl font-light tracking-[-0.02em]">
-                    {s.name}
+                  <div className="relative mt-4 aspect-[1.14/1] overflow-hidden border-y border-white/8 bg-[radial-gradient(circle_at_50%_42%,rgba(255,255,255,0.05),rgba(9,10,16,0.22)_52%,rgba(9,10,16,0.92)_100%)]">
+                    <OrbitPreview
+                      orbits={s.cycles.map((c) => ({
+                        pulseCount: c.pulseCount,
+                        radius: 30 + c.noteIndex * 7,
+                        color: c.color,
+                        direction: c.noteIndex % 2 === 0 ? 1 : -1,
+                        offsetTurns: c.phase ?? 0,
+                      }))}
+                      bpm={s.tempo}
+                    />
                   </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Tools */}
-      <section id="tools" className="px-5 py-24 sm:px-8">
-        <div className="mx-auto max-w-7xl">
-          <div className="mb-14 max-w-2xl">
-            <div className="mb-4 text-[11px] font-mono uppercase tracking-[0.22em] text-[#FFD166]/85">
-              Tools
+                  <div className="px-5 py-5">
+                    <div className="font-serif text-[1.75rem] font-light leading-[0.96] text-white">
+                      {s.title}
+                    </div>
+                    <p className="mt-2 text-sm leading-7 text-white/52">{s.description}</p>
+                  </div>
+                </motion.button>
+              ))}
             </div>
-            <h2 className="rg-font-serif text-4xl font-light leading-[1] tracking-[-0.04em] sm:text-5xl">
-              Built to watch, write, and capture.
+          </div>
+        </section>
+
+        {/* PHILOSOPHY — exact copy */}
+        <section
+          id="philosophy"
+          className="border-y border-white/10 px-5 py-18 sm:px-8 sm:py-24"
+        >
+          <div className="mx-auto max-w-5xl text-center">
+            <div className="mx-auto inline-flex w-fit items-center rounded-full border border-white/10 bg-white/[0.035] px-4 py-2 text-[11px] font-mono uppercase tracking-[0.2em] text-white/54">
+              Why it works
+            </div>
+            <h2 className="mx-auto mt-6 max-w-3xl font-serif text-3xl font-light tracking-[-0.04em] text-white sm:text-5xl sm:leading-[1.02]">
+              Rhythm is ratio. Ratio creates motion. Motion forms geometry.
             </h2>
+            <p className="mx-auto mt-6 max-w-2xl text-sm leading-8 text-white/56 sm:text-base">
+              What you hear... is structure unfolding in time.
+            </p>
+            <p className="mx-auto mt-5 max-w-2xl text-sm leading-8 text-white/42 sm:text-base">
+              Music, math, motion, and form — different expressions of the same relationship.
+            </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {TOOLS.map((t, i) => (
-              <motion.div
-                key={t.title}
-                initial={{ opacity: 0, y: 18 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.5, delay: i * 0.05 }}
-                className="rounded-[1.5rem] border border-white/[0.08] bg-[#0a0d14] p-6 transition hover:border-white/[0.18]"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#00FFAA]">
-                  <t.icon size={18} />
-                </div>
-                <div className="mt-5 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
-                  {t.label}
-                </div>
-                <div className="mt-1 rg-font-serif text-2xl font-light tracking-[-0.02em]">
-                  {t.title}
-                </div>
-                <p className="mt-3 text-[13px] leading-7 text-white/55">{t.text}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
 
-      {/* Philosophy */}
-      <section id="philosophy" className="px-5 py-28 sm:px-8">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="mb-6 text-[11px] font-mono uppercase tracking-[0.22em] text-[#FF7799]/85">
-            Philosophy
+        {/* TOOLS — exact copy */}
+        <section id="tools" className="border-y border-white/10 px-5 py-18 sm:px-8 sm:py-24">
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-14 max-w-2xl">
+              <div className="inline-flex items-center rounded-full border border-[#88CCFF]/20 bg-[#88CCFF]/[0.08] px-4 py-2 text-[11px] font-mono uppercase tracking-[0.2em] text-[#88CCFF] shadow-[0_0_24px_rgba(136,204,255,0.08)]">
+                Tools
+              </div>
+              <h2 className="mt-4 font-serif text-3xl font-light tracking-[-0.04em] text-white sm:text-5xl sm:leading-[0.98]">
+                Built to watch, write, and capture.
+              </h2>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {TOOLS.map((t, i) => {
+                const Icon = ICONS[t.label] ?? CircleDot;
+                return (
+                  <motion.div
+                    key={t.title}
+                    initial={{ opacity: 0, y: 18 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-60px" }}
+                    transition={{ duration: 0.5, delay: i * 0.05 }}
+                    className="rounded-[1.5rem] border border-white/[0.08] bg-[#0a0d14] p-6 transition hover:border-white/[0.18]"
+                  >
+                    <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#00FFAA]">
+                      <Icon size={18} />
+                    </div>
+                    <div className="mt-5 text-[10px] font-mono uppercase tracking-[0.2em] text-white/45">
+                      {t.label}
+                    </div>
+                    <div className="mt-1 font-serif text-2xl font-light tracking-[-0.02em]">
+                      {t.title}
+                    </div>
+                    <p className="mt-3 text-[13px] leading-7 text-white/55">{t.text}</p>
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
-          <h2 className="rg-font-serif text-4xl font-light leading-[1.05] tracking-[-0.04em] sm:text-6xl">
-            Rhythm is not a beat.
-            <br />
-            It is the <span className="italic text-[#7FD7FF]">shape of return</span>.
-          </h2>
-          <p className="mx-auto mt-8 max-w-2xl text-[15px] leading-8 text-white/62">
-            Every polyrhythm is a curve. Every riff is a path. When you watch cycles turn together, you stop
-            counting and start seeing — the moment a pattern comes home is visible long before you can hear it.
-            This tool is built around that single idea: make the structure visible, and the music follows.
+        </section>
+
+        {/* PRO — exact copy */}
+        <section id="pro" className="border-y border-white/10 px-5 py-8 sm:px-8 sm:py-10">
+          <div className="mx-auto max-w-7xl">
+            <div className="overflow-hidden rounded-[2.1rem] border border-white/10 bg-[#0d1017]/88 shadow-[0_30px_120px_rgba(0,0,0,0.32)] backdrop-blur-xl">
+              <div className="grid gap-0 lg:grid-cols-[0.92fr_1.08fr]">
+                <div className="relative px-6 py-8 sm:px-8 sm:py-10">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(255,170,0,0.12),transparent_30%),radial-gradient(circle_at_76%_72%,rgba(0,255,170,0.08),transparent_28%)]" />
+                  <div className="relative">
+                    <div className="inline-flex items-center rounded-full border border-[#FFAA00]/20 bg-[#FFAA00]/[0.08] px-4 py-2 text-[11px] font-mono uppercase tracking-[0.2em] text-[#FFAA00] shadow-[0_0_24px_rgba(255,170,0,0.09)]">
+                      Extended Access
+                    </div>
+                    <h2 className="mt-4 max-w-lg text-3xl font-light tracking-[-0.04em] text-white sm:text-[2.65rem] sm:leading-[1.02]">
+                      Keep the scenes that matter and go further with them.
+                    </h2>
+                    <p className="mt-5 max-w-xl text-sm leading-7 text-white/60 sm:text-base">
+                      Pro unlocks scene saving, premium studies, broader randomization, export tools,
+                      and the wider control set across Orbits, Polyrhythm Study, and Riff Cycle.
+                    </p>
+                    <p className="mt-4 max-w-xl text-[13px] leading-7 text-white/42 sm:text-sm">
+                      It is for the version of the app you come back to: the one where strong ideas
+                      stay organized, get refined, and keep turning into finished work.
+                    </p>
+                    <div className="mt-8 flex flex-wrap items-center gap-4">
+                      <button
+                        onClick={() => goLaunch()}
+                        className="inline-flex items-center gap-2 rounded-full border border-[#FFAA00]/25 bg-[#FFAA00]/10 px-5 py-3 text-[12px] font-mono uppercase tracking-[0.14em] text-[#FFAA00] transition hover:bg-[#FFAA00]/16"
+                      >
+                        Unlock Pro In App
+                        <ArrowRight size={15} />
+                      </button>
+                      <div className="text-[11px] font-mono uppercase tracking-[0.14em] text-white/42">
+                        Pro already active on this account
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="border-t border-white/8 px-6 py-8 sm:px-8 sm:py-10 lg:border-l lg:border-t-0">
+                  <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                    {PRO_FEATURES.map((t) => (
+                      <div
+                        key={t.title}
+                        className="rounded-[1.15rem] border border-white/8 bg-white/[0.03] p-4 sm:rounded-[1.4rem] sm:p-5"
+                      >
+                        <div className="text-[10px] font-mono uppercase tracking-[0.18em] text-[#FFAA00]/84">
+                          {t.label}
+                        </div>
+                        <div className="mt-2 text-[1rem] font-light leading-[1.08] text-white sm:mt-3 sm:text-xl">
+                          {t.title}
+                        </div>
+                        <p className="mt-2 text-[11px] leading-5 text-white/52 sm:mt-3 sm:text-sm sm:leading-7">
+                          {t.text}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* CTA — exact copy */}
+        <section className="border-t border-white/10 px-5 pb-20 pt-8 sm:px-8 sm:pb-28">
+          <div className="mx-auto max-w-5xl">
+            <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] px-6 py-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_24px_80px_rgba(0,0,0,0.24)] sm:px-10 sm:py-14">
+              <div className="text-[11px] font-mono uppercase tracking-[0.24em] text-white/42">
+                Open The Instrument
+              </div>
+              <h2 className="mt-4 font-serif text-3xl font-light tracking-[-0.04em] text-white sm:text-5xl">
+                Start exploring.
+              </h2>
+              <div className="mt-8 flex flex-wrap items-center justify-center gap-4">
+                <button
+                  onClick={() => goLaunch()}
+                  className="inline-flex items-center gap-2 rounded-full border border-[#00ffaa]/25 bg-[#00ffaa]/12 px-5 py-3 text-[12px] font-mono uppercase tracking-[0.14em] text-[#00ffaa] transition hover:bg-[#00ffaa]/18"
+                >
+                  Choose A Mode
+                  <ArrowRight size={15} />
+                </button>
+                <a
+                  href="#modes"
+                  className="inline-flex items-center gap-2 rounded-full border border-white/10 px-5 py-3 text-[12px] font-mono uppercase tracking-[0.14em] text-white/74 transition hover:border-white/20 hover:text-white"
+                >
+                  Explore The Modes
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer className="border-t border-white/10 px-5 py-8 text-center sm:px-8">
+          <p className="mx-auto max-w-3xl text-[11px] font-mono uppercase tracking-[0.14em] text-white/34">
+            Rhythmic Geometry™ is a trademark of Marc DeBlasie. The original rhythm geometry app.
           </p>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="px-5 pb-32 sm:px-8">
-        <div className="mx-auto max-w-5xl overflow-hidden rounded-[2.5rem] border border-white/10 bg-[#0a0d14] px-8 py-16 text-center sm:px-16">
-          <div className="mx-auto mb-8 flex max-w-md flex-wrap items-center justify-center gap-2">
-            {ORBIT_PALETTE.slice(0, 8).map((c) => (
-              <span
-                key={c}
-                className="h-2 w-8 rounded-full"
-                style={{ background: c, boxShadow: `0 0 12px ${c}55` }}
-              />
-            ))}
-          </div>
-          <h2 className="rg-font-serif text-4xl font-light leading-[1] tracking-[-0.04em] sm:text-6xl">
-            Press play. Watch the cycle return.
-          </h2>
-          <p className="mx-auto mt-6 max-w-xl text-[15px] leading-8 text-white/58">
-            Three modes. One geometry engine. Zero sign-up. The clone runs entirely in your browser using Web
-            Audio and Canvas 2D.
-          </p>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-            <button
-              onClick={() => goApp("orbital")}
-              className="inline-flex items-center gap-2 rounded-full bg-[#00FFAA] px-7 py-3.5 text-[12px] font-mono uppercase tracking-[0.16em] text-[#05070d] transition hover:shadow-[0_0_40px_rgba(0,255,170,0.45)]"
-            >
-              Enter Orbit
-              <ArrowRight size={14} />
-            </button>
-            <button
-              onClick={() => goApp("polyrhythm-study")}
-              className="inline-flex items-center gap-2 rounded-full border border-[#7FD7FF]/30 bg-[#7FD7FF]/10 px-7 py-3.5 text-[12px] font-mono uppercase tracking-[0.16em] text-[#7FD7FF] transition hover:bg-[#7FD7FF]/15"
-            >
-              Open Study
-            </button>
-            <button
-              onClick={() => goApp("riff-cycle-study")}
-              className="inline-flex items-center gap-2 rounded-full border border-[#FFD166]/30 bg-[#FFD166]/10 px-7 py-3.5 text-[12px] font-mono uppercase tracking-[0.16em] text-[#FFD166] transition hover:bg-[#FFD166]/15"
-            >
-              Start Riff
-            </button>
-          </div>
-        </div>
-      </section>
-
-      <footer className="border-t border-white/[0.06] px-5 py-10 sm:px-8">
-        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-4 text-[11px] font-mono uppercase tracking-[0.16em] text-white/40 sm:flex-row sm:items-center">
-          <div>Rhythmic Geometry — Clone · Built with Next.js + Web Audio</div>
-          <div>Reverse-engineered for educational purposes · No commercial use</div>
-        </div>
-      </footer>
+        </footer>
+      </main>
     </div>
   );
 }
 
-const SHOWCASE_SCENES = [
-  {
-    id: "prime-ritual",
-    name: "Prime Ritual",
-    accent: "#00FFAA",
-    accent2: "#3388FF",
-    orbits: [
-      { pulseCount: 2, radius: 35, color: "#00FFAA", direction: 1 as const, offsetTurns: 0 },
-      { pulseCount: 3, radius: 65, color: "#3388FF", direction: 1 as const, offsetTurns: 0 },
-      { pulseCount: 5, radius: 100, color: "#FFAA00", direction: -1 as const, offsetTurns: 0.5 },
-    ],
-  },
-  {
-    id: "rose-engine",
-    name: "Rose Engine",
-    accent: "#88CCFF",
-    accent2: "#AA44FF",
-    orbits: [
-      { pulseCount: 4, radius: 40, color: "#88CCFF", direction: 1 as const, offsetTurns: 0 },
-      { pulseCount: 7, radius: 75, color: "#AA44FF", direction: -1 as const, offsetTurns: 0 },
-      { pulseCount: 11, radius: 115, color: "#32CD32", direction: 1 as const, offsetTurns: 0.25 },
-    ],
-  },
-  {
-    id: "blue-mandala",
-    name: "Blue Mandala",
-    accent: "#00CCFF",
-    accent2: "#7D89FF",
-    orbits: [
-      { pulseCount: 3, radius: 30, color: "#00CCFF", direction: 1 as const, offsetTurns: 0 },
-      { pulseCount: 5, radius: 55, color: "#88CCFF", direction: 1 as const, offsetTurns: 0 },
-      { pulseCount: 7, radius: 85, color: "#7D89FF", direction: -1 as const, offsetTurns: 0.5 },
-      { pulseCount: 9, radius: 120, color: "#72F1B8", direction: 1 as const, offsetTurns: 0 },
-    ],
-  },
-  {
-    id: "metallic-whorl",
-    name: "Metallic Whorl",
-    accent: "#FFD166",
-    accent2: "#FF3366",
-    orbits: [
-      { pulseCount: 5, radius: 35, color: "#FFD166", direction: 1 as const, offsetTurns: 0 },
-      { pulseCount: 8, radius: 70, color: "#FF3366", direction: -1 as const, offsetTurns: 0 },
-      { pulseCount: 13, radius: 115, color: "#AA44FF", direction: 1 as const, offsetTurns: 0.3 },
-    ],
-  },
-];
-
-const TOOLS = [
-  {
-    icon: GalleryVerticalEnd,
-    label: "Library",
-    title: "Scene Library",
-    text: "Built-in scenes give Orbits, Polyrhythm Study, and Riff Cycle a strong starting point instead of a blank canvas.",
-  },
-  {
-    icon: SquarePlay,
-    label: "Edit",
-    title: "Focused Editors",
-    text: "Open a close writing view when you want to shape one ring or one groove directly.",
-  },
-  {
-    icon: MonitorPlay,
-    label: "Capture",
-    title: "Loop Capture",
-    text: "Record short moving studies directly from the live canvas (PNG export included).",
-  },
-  {
-    icon: CircleDot,
-    label: "Fullscreen",
-    title: "Fullscreen View",
-    text: "Hide extra controls so the pattern is easier to watch or record.",
-  },
-  {
-    icon: Layers,
-    label: "Layouts",
-    title: "Desktop + Mobile",
-    text: "A wide desktop instrument or a tighter mobile flow, without changing the core ideas.",
-  },
-  {
-    icon: Waves,
-    label: "Entry",
-    title: "Three Clear Entries",
-    text: "Orbits is for discovery, Polyrhythm Study is for clarity, and Riff Cycle is for writing.",
-  },
-];
+// Keep ORBIT_PALETTE import used (avoid unused warning)
+void ORBIT_PALETTE;

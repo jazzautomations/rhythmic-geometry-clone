@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Download, Plus, Save, Trash2 } from "lucide-react";
+import {
+  ATMOSPHERES,
+  ATMOSPHERE_LAYERS,
+  TONE_PRESETS,
+} from "@/lib/rg/presets";
+import { paintAtmosphere } from "@/lib/rg/atmosphere";
+import { getAudio } from "@/lib/rg/audio";
+import { useRG, getAtmosphere } from "@/lib/rg/store";
+import { useSceneLibrary } from "@/lib/rg/useSceneLibrary";
 import {
   DEFAULT_STUDY_SCENES,
   ORBIT_PALETTE,
@@ -10,7 +19,6 @@ import {
   clamp,
   lcm,
 } from "@/lib/rg/types";
-import { getAudio } from "@/lib/rg/audio";
 import { ModeControlsShell } from "./ModeControlsShell";
 
 interface StudyCanvasProps {
@@ -20,6 +28,11 @@ interface StudyCanvasProps {
 
 export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const atmosphereId = useRG((s) => s.atmosphereId);
+  const atmosphereLayer = useRG((s) => s.atmosphereLayer);
+  const setAtmosphere = useRG((s) => s.setAtmosphere);
+  const setAtmosphereLayer = useRG((s) => s.setAtmosphereLayer);
+
   const [scene, setScene] = useState<StudyScene>(() =>
     structuredClone(DEFAULT_STUDY_SCENES[0].scene),
   );
@@ -32,12 +45,19 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
     startPerf: 0,
     lastFiredStep: -1,
     raf: 0,
-    flashes: new Map<string, number>(), // layerId -> flash
+    flashes: new Map<string, number>(),
   });
   const [activeSceneId, setActiveSceneId] = useState(DEFAULT_STUDY_SCENES[0].id);
   const [bpm, setBpm] = useState(scene.baseBPM);
-  const [fftBg, setFftBg] = useState(true);
   const [highlightIntersections, setHighlightIntersections] = useState(true);
+  const [tonePresetId, setTonePresetId] = useState("glass");
+
+  const library = useSceneLibrary();
+
+  useEffect(() => {
+    const tone = TONE_PRESETS.find((t) => t.id === tonePresetId);
+    if (tone) getAudio().applyTonePreset(tone);
+  }, [tonePresetId]);
 
   useEffect(() => {
     getAudio().setSettings({ muted });
@@ -72,8 +92,6 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
     stateRef.current.flashes.clear();
   };
 
-  const reset = () => loadScene(DEFAULT_STUDY_SCENES[0].id);
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -98,32 +116,15 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
     const draw = (now: number) => {
       const scn = sceneRef.current;
       const st = stateRef.current;
+      const atmo = getAtmosphere(atmosphereId);
 
-      ctx.fillStyle = "#05070d";
-      ctx.fillRect(0, 0, w, h);
-
-      // ---- Background FFT ----
-      if (fftBg) {
-        const fft = getAudio().getFFT();
-        if (fft && fft.length > 0) {
-          ctx.save();
-          ctx.globalCompositeOperation = "lighter";
-          const bars = 96;
-          const step = Math.floor(fft.length / bars);
-          for (let i = 0; i < bars; i++) {
-            const v = fft[i * step] / 255;
-            const barW = w / bars;
-            const barH = v * h * 0.18;
-            const hue = 200 - (i / bars) * 200;
-            const grad = ctx.createLinearGradient(0, 0, 0, barH);
-            grad.addColorStop(0, `hsla(${hue}, 80%, 60%, 0.4)`);
-            grad.addColorStop(1, `hsla(${hue}, 80%, 60%, 0)`);
-            ctx.fillStyle = grad;
-            ctx.fillRect(i * barW, 0, barW - 1, barH);
-          }
-          ctx.restore();
-        }
-      }
+      // Background atmosphere (subtle)
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      paintAtmosphere(ctx as CanvasRenderingContext2D, w, h, atmo, {
+        presentationMode: false,
+        seed: 47,
+        layer: "none",
+      });
 
       const totalSteps = scn.stepsPerBar * scn.bars;
       const layerLcm = scn.layers.reduce((acc, l) => lcm(acc, l.pulseCount), 1);
@@ -137,8 +138,8 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
       const rowH = usableH / Math.max(1, scn.layers.length);
       const stepW = usableW / effectiveSteps;
 
-      // ---- Title ----
-      ctx.fillStyle = "rgba(255,255,255,0.6)";
+      // Title
+      ctx.fillStyle = "rgba(255,255,255,0.65)";
       ctx.font = "11px ui-monospace, monospace";
       ctx.textAlign = "left";
       ctx.fillText(
@@ -152,7 +153,6 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
       const continuousStep = (elapsedSec / stepDurationSec) % effectiveSteps;
       const currentStep = Math.floor(continuousStep);
 
-      // ---- Detect intersections ----
       const isIntersection = (s: number) => {
         if (!highlightIntersections) return false;
         return scn.layers.every((layer) => {
@@ -161,22 +161,21 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
         });
       };
 
-      // ---- Rows ----
+      // Rows
       scn.layers.forEach((layer, idx) => {
         const y = padTop + idx * rowH;
         const flash = st.flashes.get(layer.id) ?? 0;
 
-        // Row background with subtle flash
-        ctx.fillStyle = `rgba(255,255,255,${0.02 + flash * 0.04})`;
+        // Row bg with flash
+        ctx.fillStyle = `rgba(255,255,255,${0.025 + flash * 0.05})`;
         ctx.fillRect(padX, y + 4, usableW, rowH - 8);
 
         // Label
         ctx.fillStyle = layer.color;
-        ctx.font = "bold 13px ui-monospace, monospace";
+        ctx.font = "bold 14px ui-monospace, monospace";
         ctx.textAlign = "right";
         ctx.fillText(`1 : ${layer.pulseCount}`, padX - 14, y + rowH / 2 + 5);
 
-        // Cells
         const pulseEvery = effectiveSteps / layer.pulseCount;
         for (let s = 0; s < effectiveSteps; s++) {
           const cellX = padX + s * stepW;
@@ -187,7 +186,7 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
             // Glow
             ctx.save();
             ctx.globalCompositeOperation = "lighter";
-            const glowSize = isCurrent ? rowH * 0.9 : rowH * 0.6;
+            const glowSize = (isCurrent ? rowH * 0.95 : rowH * 0.65) * atmo.glowMultiplier;
             const grad = ctx.createRadialGradient(
               cellX + stepW / 2,
               y + rowH / 2,
@@ -202,31 +201,28 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
             ctx.fillRect(cellX - 4, y + 4, stepW + 8, rowH - 8);
             ctx.restore();
 
-            // Solid cell
             ctx.fillStyle = isCurrent ? "#ffffff" : layer.color;
             ctx.fillRect(cellX + 1, y + 10, Math.max(2, stepW - 2), rowH - 20);
 
             if (intersection && idx === 0) {
-              // Vertical highlight bar for intersections
               ctx.save();
               ctx.globalCompositeOperation = "lighter";
               const igrad = ctx.createLinearGradient(cellX, padTop, cellX, h - padBot);
               igrad.addColorStop(0, "rgba(255,255,255,0.0)");
-              igrad.addColorStop(0.5, "rgba(255,255,255,0.18)");
+              igrad.addColorStop(0.5, "rgba(255,255,255,0.2)");
               igrad.addColorStop(1, "rgba(255,255,255,0.0)");
               ctx.fillStyle = igrad;
               ctx.fillRect(cellX, padTop, Math.max(2, stepW - 2), usableH);
               ctx.restore();
             }
           } else {
-            // Faint tick
             ctx.fillStyle = "rgba(255,255,255,0.06)";
             ctx.fillRect(cellX + 1, y + rowH / 2 - 1, Math.max(1, stepW - 2), 2);
           }
         }
       });
 
-      // ---- Playhead ----
+      // Playhead
       if (playing) {
         const px = padX + continuousStep * stepW;
         ctx.save();
@@ -251,8 +247,8 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
         ctx.fill();
       }
 
-      // ---- Bar markers ----
-      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      // Bar markers
+      ctx.strokeStyle = "rgba(255,255,255,0.2)";
       ctx.lineWidth = 1;
       ctx.font = "9px ui-monospace, monospace";
       ctx.textAlign = "center";
@@ -272,13 +268,13 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
         }
       }
 
-      // ---- Decay flashes ----
+      // Decay flashes
       for (const [k, v] of st.flashes) {
         st.flashes.set(k, v * 0.85);
         if (v < 0.02) st.flashes.delete(k);
       }
 
-      // ---- Audio firing ----
+      // Audio firing
       if (playing && currentStep !== stateRef.current.lastFiredStep && !muted) {
         stateRef.current.lastFiredStep = currentStep;
         scn.layers.forEach((layer, idx) => {
@@ -288,9 +284,11 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
             getAudio().blip({
               color: layer.color,
               voiceId: layer.id,
+              noteIndex: currentStep % 8,
               velocity: scn.layers.length,
-              duration: 0.4,
+              duration: 0.5,
               pan,
+              type: "tone",
             });
             st.flashes.set(layer.id, 1);
           }
@@ -304,7 +302,7 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
       cancelAnimationFrame(stateRef.current.raf);
       ro.disconnect();
     };
-  }, [playing, muted, scene, bpm, fftBg, highlightIntersections]);
+  }, [playing, muted, scene, bpm, atmosphereId, highlightIntersections]);
 
   const addLayer = () => {
     setScene((prev) => {
@@ -350,82 +348,198 @@ export function StudyCanvas({ playing, muted }: StudyCanvasProps) {
 
   const layerLcm = scene.layers.reduce((acc, l) => lcm(acc, l.pulseCount), 1);
 
+  const exportPNG = () => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement("a");
+    link.href = canvas.toDataURL("image/png");
+    link.download = `polyrhythm-${scene.layers.map((l) => l.label).join("v")}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const saveToLibrary = () => {
+    library.save({ name: `${scene.layers.map((l) => l.label).join(" v ")}`, mode: "polyrhythm-study", data: scene });
+  };
+
   return (
     <ModeControlsShell
       mode="polyrhythm-study"
       scenePresets={DEFAULT_STUDY_SCENES.map((s) => ({ id: s.id, name: s.name }))}
       activeSceneId={activeSceneId}
       onSelectScene={loadScene}
-      onReset={reset}
+      onReset={() => loadScene(DEFAULT_STUDY_SCENES[0].id)}
       transport={
         <>
           <Slider label="BPM" value={bpm} min={40} max={200} step={1} onChange={setBpm} suffix="bpm" />
           <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[10px] font-mono uppercase tracking-[0.14em] text-white/55">
             Layers · {scene.layers.length}  ·  LCM = {layerLcm}
           </div>
-          <Toggle label="FFT Background" value={fftBg} onChange={setFftBg} />
-          <Toggle label="Highlight Intersections" value={highlightIntersections} onChange={setHighlightIntersections} />
+          <Toggle label="Intersections" value={highlightIntersections} onChange={setHighlightIntersections} />
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-white/45">Tone</div>
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              {TONE_PRESETS.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTonePresetId(t.id)}
+                  className={`rounded-md border px-2 py-1 text-[9px] font-mono uppercase tracking-[0.1em] transition ${
+                    tonePresetId === t.id
+                      ? "border-[#7FD7FF]/40 bg-[#7FD7FF]/10 text-[#7FD7FF]"
+                      : "border-white/10 text-white/55 hover:border-white/20"
+                  }`}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={exportPNG}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-white/10 px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-white/70 transition hover:border-[#7FD7FF]/40 hover:text-white"
+            >
+              <Download size={11} /> PNG
+            </button>
+            <button
+              onClick={saveToLibrary}
+              className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-md border border-white/10 px-2 py-1.5 text-[10px] font-mono uppercase tracking-[0.12em] text-white/70 transition hover:border-[#7FD7FF]/40 hover:text-white"
+            >
+              <Save size={11} /> Save
+            </button>
+          </div>
         </>
       }
       editor={
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="text-[11px] font-mono uppercase tracking-[0.16em] text-white/45">
-              Layers · {scene.layers.length}
+          {/* Atmosphere picker */}
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/45">Atmosphere</div>
+            <div className="mt-1.5 grid grid-cols-3 gap-1">
+              {ATMOSPHERES.map((a) => (
+                <button
+                  key={a.id}
+                  onClick={() => setAtmosphere(a.id)}
+                  className={`rounded-md border px-2 py-1.5 text-[9px] font-mono uppercase tracking-[0.1em] transition ${
+                    atmosphereId === a.id
+                      ? "border-[#7FD7FF]/40 bg-[#7FD7FF]/10 text-[#7FD7FF]"
+                      : "border-white/10 text-white/55 hover:border-white/20"
+                  }`}
+                >
+                  {a.shortLabel}
+                </button>
+              ))}
             </div>
-            <button
-              onClick={addLayer}
-              disabled={scene.layers.length >= 5}
-              className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] text-white/70 transition hover:border-[#7FD7FF]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-            >
-              <Plus size={11} /> Add
-            </button>
           </div>
-          <div className="space-y-2">
-            {scene.layers.map((l, i) => (
-              <div key={l.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="h-3 w-3 rounded-full"
-                      style={{ background: l.color, boxShadow: `0 0 10px ${l.color}88` }}
-                    />
-                    <span className="text-[11px] font-mono uppercase tracking-[0.14em] text-white/70">
-                      Layer {i + 1}
-                    </span>
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/45">Layer</div>
+            <div className="mt-1.5 grid grid-cols-3 gap-1">
+              {ATMOSPHERE_LAYERS.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={() => setAtmosphereLayer(l.id as "none" | "stars" | "deep-field" | "dust" | "nebula-haze")}
+                  className={`rounded-md border px-2 py-1.5 text-[9px] font-mono uppercase tracking-[0.1em] transition ${
+                    atmosphereLayer === l.id
+                      ? "border-[#7FD7FF]/40 bg-[#7FD7FF]/10 text-[#7FD7FF]"
+                      : "border-white/10 text-white/55 hover:border-white/20"
+                  }`}
+                >
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-white/[0.06] pt-3">
+            <div className="flex items-center justify-between">
+              <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/45">
+                Layers · {scene.layers.length}
+              </div>
+              <button
+                onClick={addLayer}
+                disabled={scene.layers.length >= 5}
+                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-[10px] font-mono uppercase tracking-[0.14em] text-white/70 transition hover:border-[#7FD7FF]/40 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <Plus size={11} /> Add
+              </button>
+            </div>
+            <div className="mt-2 space-y-2">
+              {scene.layers.map((l, i) => (
+                <div key={l.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="h-3 w-3 rounded-full"
+                        style={{ background: l.color, boxShadow: `0 0 10px ${l.color}88` }}
+                      />
+                      <span className="text-[11px] font-mono uppercase tracking-[0.14em] text-white/70">
+                        Layer {i + 1}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => removeLayer(l.id)}
+                      className="text-white/40 transition hover:text-[#FF3366]"
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => removeLayer(l.id)}
-                    className="text-white/40 transition hover:text-[#FF3366]"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-                <div className="mt-2 grid grid-cols-2 gap-2">
-                  <NumField
-                    label="Pulses"
-                    value={l.pulseCount}
-                    min={1}
-                    max={32}
-                    onChange={(v) => updateLayer(l.id, { pulseCount: v })}
-                  />
-                  <div>
-                    <div className="text-[9px] font-mono uppercase tracking-[0.16em] text-white/40">Color</div>
-                    <div className="mt-1 flex flex-wrap gap-1">
-                      {ORBIT_PALETTE.slice(0, 8).map((c) => (
-                        <button
-                          key={c}
-                          onClick={() => updateLayer(l.id, { color: c })}
-                          className={`h-5 w-5 rounded-full border ${l.color === c ? "border-white" : "border-transparent"}`}
-                          style={{ background: c }}
-                        />
-                      ))}
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <NumField
+                      label="Pulses"
+                      value={l.pulseCount}
+                      min={1}
+                      max={32}
+                      onChange={(v) => updateLayer(l.id, { pulseCount: v })}
+                    />
+                    <div>
+                      <div className="text-[9px] font-mono uppercase tracking-[0.16em] text-white/40">Color</div>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {ORBIT_PALETTE.slice(0, 8).map((c) => (
+                          <button
+                            key={c}
+                            onClick={() => updateLayer(l.id, { color: c })}
+                            className={`h-5 w-5 rounded-full border ${l.color === c ? "border-white" : "border-transparent"}`}
+                            style={{ background: c }}
+                          />
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
+
+          {library.scenes.filter((s) => s.mode === "polyrhythm-study").length > 0 && (
+            <div className="border-t border-white/[0.06] pt-3">
+              <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/45">My Library</div>
+              <div className="mt-2 space-y-1.5">
+                {library.scenes
+                  .filter((s) => s.mode === "polyrhythm-study")
+                  .map((s) => (
+                    <div
+                      key={s.id}
+                      className="flex items-center justify-between rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2"
+                    >
+                      <button
+                        onClick={() => setScene(structuredClone(s.data) as StudyScene)}
+                        className="flex-1 text-left text-[11px] font-mono text-white/70 hover:text-white"
+                      >
+                        {s.name}
+                      </button>
+                      <button
+                        onClick={() => library.remove(s.id)}
+                        className="text-white/40 transition hover:text-[#FF3366]"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 text-[11px] leading-6 text-white/55">
             Watch when pulses stack vertically — that&apos;s where the rhythms align. The vertical white bars
             mark intersections where every layer pulses together.
