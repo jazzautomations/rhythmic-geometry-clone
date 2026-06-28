@@ -189,6 +189,22 @@ class AudioEngine {
       this.comp.connect(this.limiter);
       this.limiter.connect(this.analyser);
       this.analyser.connect(this.ctx.destination);
+
+      // Safety net: the context can be created OUTSIDE a user gesture (e.g. the
+      // rAF blip loop fires before Play is pressed). Resume on the first user
+      // interaction anywhere, and again whenever the tab becomes visible (iOS
+      // suspends/interrupts audio when backgrounded or after a phone call).
+      if (typeof window !== "undefined") {
+        const unlock = () => this.resume();
+        window.addEventListener("pointerdown", unlock, { once: true });
+        window.addEventListener("touchend", unlock, { once: true, passive: true });
+        window.addEventListener("keydown", unlock, { once: true });
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible" && this.ctx && this.ctx.state !== "running") {
+            this.ctx.resume().catch(() => {});
+          }
+        });
+      }
     }
     // NOTE: Do NOT call ctx.resume() here — on iOS this fails silently
     // when not inside a user gesture. Resume is handled exclusively by
@@ -202,21 +218,22 @@ class AudioEngine {
     try {
       this.ensure();
       if (!this.ctx) return;
-      if (this.ctx.state === "suspended") {
-        await this.ctx.resume();
+      // iOS reports both "suspended" and "interrupted" (after a call / screen
+      // lock). Resume on anything that isn't already running.
+      if (this.ctx.state !== "running") {
+        await this.ctx.resume().catch(() => {});
       }
-      // iOS Safari also needs an actual sound to fully unlock audio.
-      // Play a near-silent oscillator through the destination.
+      // iOS only flips into the fully-unlocked state once an actual
+      // BufferSource has been started. A zero-gain oscillator is unreliable;
+      // a 1-frame empty buffer is the canonical, silent unlock.
       if (!this.unlocked && this.ctx.state === "running") {
         this.unlocked = true;
         try {
-          const osc = this.ctx.createOscillator();
-          const g = this.ctx.createGain();
-          g.gain.value = 0;
-          osc.connect(g);
-          g.connect(this.ctx.destination);
-          osc.start();
-          osc.stop(this.ctx.currentTime + 0.01);
+          const buf = this.ctx.createBuffer(1, 1, 22050);
+          const src = this.ctx.createBufferSource();
+          src.buffer = buf;
+          src.connect(this.ctx.destination);
+          src.start(0);
         } catch {
           // ignore
         }

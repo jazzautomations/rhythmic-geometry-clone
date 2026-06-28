@@ -62,7 +62,14 @@ export const useRG = create<RGState>((set, get) => ({
   setAtmosphereLayer: (l) => set({ atmosphereLayer: l }),
   setActiveOrbitScene: (id) => set({ activeOrbitSceneId: id }),
   goLaunch: () => set({ view: "launch" }),
-  goApp: (mode) => set({ view: "app", mode, playing: true }),
+  goApp: (mode) => {
+    // Entering a mode starts playback immediately. The card tap IS a user
+    // gesture, so unlock/resume the AudioContext here — otherwise on mobile
+    // (iOS Safari) the context is created suspended inside the rAF loop and
+    // never resumes, leaving the app silent until Play is pressed twice.
+    getAudio().resume();
+    set({ view: "app", mode, playing: true });
+  },
   goHome: () => set({ view: "landing", playing: false }),
 }));
 
