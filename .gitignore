@@ -61,3 +61,4 @@ server.log
 /mini-services/         # not used in this clone
 /worklog.md             # multi-agent worklog
 /bun.lock               # keep or ignore — using package-lock convention
+.env
