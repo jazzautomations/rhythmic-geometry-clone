@@ -303,90 +303,90 @@ export function LandingView() {
                   Set constraints. Watch structure appear.
                 </p>
               </div>
+            </div>
 
-              <div className="mt-12 space-y-10 lg:space-y-0">
-                {MODES.map((m) => (
-                  <div key={m.id} className="lg:flex lg:min-h-[78vh] lg:items-center">
-                    <motion.div
-                      initial={{ opacity: 0, y: 20 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      viewport={{ once: true, margin: "-80px" }}
-                      transition={{ duration: 0.55 }}
-                      className="max-w-xl rounded-[2rem] border border-white/[0.08] bg-white/[0.02] p-6 sm:p-8"
-                      style={{
-                        borderColor: `${m.accent}30`,
-                        boxShadow: `0 0 80px ${m.accent}10, inset 0 1px 0 rgba(255,255,255,0.06)`,
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-4">
-                        <div
-                          className="text-[10px] font-mono uppercase tracking-[0.18em]"
-                          style={{ color: m.accent }}
-                        >
-                          {m.eyebrow}
-                        </div>
-                        <div
-                          className="flex h-10 w-10 items-center justify-center rounded-2xl border"
-                          style={{
-                            background: `${m.accent}12`,
-                            borderColor: `${m.accent}1f`,
-                            color: m.accent,
-                          }}
-                        >
-                          {m.id === "orbital" ? (
-                            <CircleDot size={16} />
-                          ) : m.id === "polyrhythm-study" ? (
-                            <Layers size={16} />
-                          ) : (
-                            <SquarePlay size={16} />
-                          )}
-                        </div>
+            <div className="mt-12 space-y-10 lg:mt-0 lg:space-y-0">
+              {MODES.map((m) => (
+                <div key={m.id} className="lg:flex lg:min-h-[78vh] lg:items-center">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    whileInView={{ opacity: 1, y: 0 }}
+                    viewport={{ once: true, margin: "-80px" }}
+                    transition={{ duration: 0.55 }}
+                    className="max-w-xl rounded-[2rem] border border-white/[0.08] bg-white/[0.02] p-6 sm:p-8"
+                    style={{
+                      borderColor: `${m.accent}30`,
+                      boxShadow: `0 0 80px ${m.accent}10, inset 0 1px 0 rgba(255,255,255,0.06)`,
+                    }}
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div
+                        className="text-[10px] font-mono uppercase tracking-[0.18em]"
+                        style={{ color: m.accent }}
+                      >
+                        {m.eyebrow}
                       </div>
-                      <div className="mt-5 font-serif text-[2.65rem] font-light tracking-[-0.05em] leading-[0.95] text-white">
-                        {m.name}
+                      <div
+                        className="flex h-10 w-10 items-center justify-center rounded-2xl border"
+                        style={{
+                          background: `${m.accent}12`,
+                          borderColor: `${m.accent}1f`,
+                          color: m.accent,
+                        }}
+                      >
+                        {m.id === "orbital" ? (
+                          <CircleDot size={16} />
+                        ) : m.id === "polyrhythm-study" ? (
+                          <Layers size={16} />
+                        ) : (
+                          <SquarePlay size={16} />
+                        )}
                       </div>
-                      <p className="mt-4 text-lg leading-8 text-white/72">{m.eyebrow}</p>
-                      <p className="mt-5 text-sm leading-8 text-white/58">{m.description}</p>
-                      <div className="mt-6 border-t border-white/10 pt-6">
-                        <div className="rounded-[1.3rem] border border-white/8 bg-[#090a10]/72 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-                          <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/34">
-                            Form
+                    </div>
+                    <div className="mt-5 font-serif text-[2.65rem] font-light tracking-[-0.05em] leading-[0.95] text-white">
+                      {m.name}
+                    </div>
+                    <p className="mt-4 text-lg leading-8 text-white/72">{m.eyebrow}</p>
+                    <p className="mt-5 text-sm leading-8 text-white/58">{m.description}</p>
+                    <div className="mt-6 border-t border-white/10 pt-6">
+                      <div className="rounded-[1.3rem] border border-white/8 bg-[#090a10]/72 px-4 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+                        <div className="text-[10px] font-mono uppercase tracking-[0.16em] text-white/34">
+                          Form
+                        </div>
+                        <div className="mt-2 text-sm leading-7 text-white/66">{m.summary}</div>
+                      </div>
+                    </div>
+                    <div className="mt-6 border-t border-white/10 pt-6">
+                      <div className="space-y-3">
+                        {m.details.slice(0, 2).map((d) => (
+                          <div key={d} className="flex items-start gap-3 text-sm leading-7 text-white/62">
+                            <div
+                              className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full"
+                              style={{ background: m.accent, boxShadow: `0 0 10px ${m.accent}` }}
+                            />
+                            <span>{d}</span>
                           </div>
-                          <div className="mt-2 text-sm leading-7 text-white/66">{m.summary}</div>
-                        </div>
+                        ))}
                       </div>
-                      <div className="mt-6 border-t border-white/10 pt-6">
-                        <div className="space-y-3">
-                          {m.details.slice(0, 2).map((d) => (
-                            <div key={d} className="flex items-start gap-3 text-sm leading-7 text-white/62">
-                              <div
-                                className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full"
-                                style={{ background: m.accent, boxShadow: `0 0 10px ${m.accent}` }}
-                              />
-                              <span>{d}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="mt-7">
-                        <button
-                          onClick={() => goApp(m.id)}
-                          className="inline-flex items-center gap-2 rounded-full border px-5 py-3 text-[12px] font-mono uppercase tracking-[0.14em] transition"
-                          style={{
-                            borderColor: `${m.accent}30`,
-                            background: `${m.accent}12`,
-                            color: m.accent,
-                            boxShadow: `0 0 26px ${m.accent}10`,
-                          }}
-                        >
-                          {m.launchLabel}
-                          <ArrowRight size={15} />
-                        </button>
-                      </div>
-                    </motion.div>
-                  </div>
-                ))}
-              </div>
+                    </div>
+                    <div className="mt-7">
+                      <button
+                        onClick={() => goApp(m.id)}
+                        className="inline-flex items-center gap-2 rounded-full border px-5 py-3 text-[12px] font-mono uppercase tracking-[0.14em] transition"
+                        style={{
+                          borderColor: `${m.accent}30`,
+                          background: `${m.accent}12`,
+                          color: m.accent,
+                          boxShadow: `0 0 26px ${m.accent}10`,
+                        }}
+                      >
+                        {m.launchLabel}
+                        <ArrowRight size={15} />
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+              ))}
             </div>
           </div>
         </section>

@@ -63,10 +63,10 @@ export function ModeControlsShell({
   // CRITICAL: iOS Safari requires AudioContext.resume() inside a user gesture.
   // The Play button onClick calls handlePlay synchronously — this is the
   // only place where audio is unlocked.
-  const handlePlay = () => {
+  const handlePlay = async () => {
     if (!playing) {
-      // Starting playback — resume audio FIRST (synchronously, in the gesture)
-      getAudio().resume();
+      // Starting playback — resume audio FIRST (in the gesture)
+      await getAudio().resume();
     }
     togglePlaying();
   };

@@ -105,6 +105,7 @@ class AudioEngine {
   private analyser: AnalyserNode | null = null;
   private fftData: Uint8Array<ArrayBuffer> | null = null;
   private waveformData: Uint8Array<ArrayBuffer> | null = null;
+  private unlocked = false;
 
   private settings: AudioSettings = { ...DEFAULT_AUDIO_SETTINGS };
 
@@ -189,35 +190,36 @@ class AudioEngine {
       this.limiter.connect(this.analyser);
       this.analyser.connect(this.ctx.destination);
     }
-    if (this.ctx.state === "suspended") {
-      this.ctx.resume().catch(() => {});
-    }
+    // NOTE: Do NOT call ctx.resume() here — on iOS this fails silently
+    // when not inside a user gesture. Resume is handled exclusively by
+    // the resume() method which is called from user gesture handlers.
     return this.ctx;
   }
 
-  resume() {
+  // Must be called from a user gesture (click/touch) on iOS Safari.
+  // This is the ONLY place where AudioContext.resume() is valid.
+  async resume() {
     try {
       this.ensure();
-      // Force resume — on iOS Safari, this MUST be called from within a
-      // user gesture (touch/click). The ModeControlsShell Play button calls
-      // getAudio().resume() synchronously in its onClick handler.
-      if (this.ctx && this.ctx.state !== "running") {
-        const p = this.ctx.resume();
-        // Also create a silent oscillator → gain → destination to "unlock"
-        // the audio on iOS (some versions need an actual sound played first).
+      if (!this.ctx) return;
+      if (this.ctx.state === "suspended") {
+        await this.ctx.resume();
+      }
+      // iOS Safari also needs an actual sound to fully unlock audio.
+      // Play a near-silent oscillator through the destination.
+      if (!this.unlocked && this.ctx.state === "running") {
+        this.unlocked = true;
         try {
-          const ctx = this.ctx;
-          const osc = ctx.createOscillator();
-          const g = ctx.createGain();
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
           g.gain.value = 0;
           osc.connect(g);
-          g.connect(ctx.destination);
+          g.connect(this.ctx.destination);
           osc.start();
-          osc.stop(ctx.currentTime + 0.01);
+          osc.stop(this.ctx.currentTime + 0.01);
         } catch {
           // ignore
         }
-        return p;
       }
     } catch {
       // no-op
@@ -298,6 +300,7 @@ class AudioEngine {
       this.stereo = null;
       this.analyser = null;
     }
+    this.unlocked = false;
     this.lastFireByVoice.clear();
     this.fireCount = 0;
     this.firstFireTime = 0;
