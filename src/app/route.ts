@@ -2,15 +2,13 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { NextResponse } from "next/server";
 
-export const dynamic = "force-static";
-
-let cachedHtml: string | null = null;
+// Always read from disk — no cache. In dev this lets us edit the HTML
+// and see changes without restarting the server.
+export const dynamic = "force-dynamic";
 
 async function getHtml(): Promise<string> {
-  if (cachedHtml) return cachedHtml;
   const htmlPath = join(process.cwd(), "public", "index-original.html");
-  cachedHtml = await readFile(htmlPath, "utf8");
-  return cachedHtml;
+  return await readFile(htmlPath, "utf8");
 }
 
 export async function GET() {
@@ -18,7 +16,7 @@ export async function GET() {
   return new NextResponse(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      "Cache-Control": "no-cache",
+      "Cache-Control": "no-cache, no-store, must-revalidate",
     },
   });
 }
