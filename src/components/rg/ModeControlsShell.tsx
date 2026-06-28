@@ -18,6 +18,16 @@ interface ModeControlsShellProps {
   children: ReactNode;
 }
 
+// Detect iOS — needed for the silent-switch hint. iOS (incl. iPadOS, which
+// reports as Mac) silences Web Audio when the hardware mute switch is on.
+function isIOS(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
 export function ModeControlsShell({
   mode,
   scenePresets,
@@ -39,6 +49,28 @@ export function ModeControlsShell({
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [level, setLevel] = useState(0);
+  const [showSilentHint, setShowSilentHint] = useState(false);
+
+  // On iOS, warn once that the hardware mute switch silences app audio.
+  // Shown on entry (covers every play path) and remembered after dismissal.
+  useEffect(() => {
+    if (!isIOS()) return;
+    try {
+      if (localStorage.getItem("rg-silent-hint-dismissed")) return;
+    } catch {
+      // ignore
+    }
+    setShowSilentHint(true);
+  }, []);
+
+  const dismissSilentHint = () => {
+    setShowSilentHint(false);
+    try {
+      localStorage.setItem("rg-silent-hint-dismissed", "1");
+    } catch {
+      // ignore
+    }
+  };
 
   // Level meter (visual feedback that audio is firing)
   useEffect(() => {
@@ -169,6 +201,31 @@ export function ModeControlsShell({
           </button>
         </div>
       </header>
+
+      {/* iOS silent-switch hint */}
+      {showSilentHint && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4 sm:bottom-6">
+          <div className="pointer-events-auto flex max-w-sm items-start gap-3 rounded-2xl border border-amber-300/30 bg-[#1a1407]/95 px-4 py-3 text-left shadow-[0_8px_40px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+            <VolumeX size={18} className="mt-0.5 shrink-0 text-amber-300" />
+            <div className="min-w-0">
+              <p className="text-[12px] font-medium leading-snug text-amber-100">
+                Sem som no iPhone?
+              </p>
+              <p className="mt-0.5 text-[11px] leading-snug text-amber-100/70">
+                Desligue a chavinha lateral de silencioso (Ring/Silent). O iOS
+                silencia o áudio do app quando ela está ativada.
+              </p>
+            </div>
+            <button
+              onClick={dismissSilentHint}
+              className="ml-1 shrink-0 rounded-full p-1 text-amber-100/60 transition hover:text-amber-100"
+              aria-label="Dispensar aviso"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Body: canvas + side panel (desktop) / drawer (mobile) */}
       <div className="relative flex min-h-0 flex-1 flex-col lg:flex-row">
